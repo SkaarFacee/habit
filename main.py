@@ -1,7 +1,10 @@
 from config.setup import Setup
+from pathlib import Path
+
 
 if __name__ =='__main__': 
-    setup_obj=Setup()
-    
-    # The setup logic is handled within Setup().__init__()
-    # If you need env_variables, you'll need to retrieve them differently
+    setup_obj=Setup().setup()
+    # Code for --setup to run setup again
+
+
+
