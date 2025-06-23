@@ -2,12 +2,8 @@ import sys
 from pathlib import Path
 from dotenv import dotenv_values, set_key
 
-# # Add the project root to sys.path
-# project_root = Path(__file__).resolve().parents[1]
-# sys.path.append(str(project_root))
-
 from config import config
-from config.constants import CONFIG_FILE
+from config.constants import CONFIG_FILE,GEMINI_MODEL_LABEL,OPENAI_MODEL_LABEL
 from config.question_model import SelectProviderQuestions, SetupQuestions
 from llm.Gemini.setup import GeminiQuestions
 from llm.OpenAI.setup import OpenAIQuestions
@@ -20,11 +16,11 @@ class Setup:
                 question_prompt='Choose which LLM do you want to use',
                 options=[
                     SelectProviderQuestions(
-                        label='Gemini',
+                        label=GEMINI_MODEL_LABEL,
                         follow_up_questions=GeminiQuestions.get_questions()
                     ),
                     SelectProviderQuestions(
-                        label='OpenAI',
+                        label=OPENAI_MODEL_LABEL,
                         follow_up_questions=OpenAIQuestions.get_questions()
                     )
                 ])]

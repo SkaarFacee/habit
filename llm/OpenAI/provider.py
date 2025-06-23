@@ -1,4 +1,4 @@
-from provider import BaseProvider
+from llm.base_provider import BaseProvider
 class OpenAIProvider(BaseProvider):
     def __init__():
         pass
