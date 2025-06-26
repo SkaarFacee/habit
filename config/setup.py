@@ -32,7 +32,6 @@ class Setup:
 
     def setup(self):
         old_config=dotenv_values(Path.home()/CONFIG_FILE)
-
         config_data = SetupView.ask_llm_setup(self.questions,old_config)
         self.save_config(config_data)
         print(f"✅ Saved config to {config.config_path}")

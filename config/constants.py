@@ -10,11 +10,15 @@ SCHEME="""
     """
 
 DEFAULT_CATEGORIES=['Work','Play','Health']
-GEMINI_PROVIDER_MODEL_LABEL='Gemini'
 GEMINI_API_LABEL='GEMINI_API_KEY'
 GEMINI_MODEL_LABEL='GEMINI_MODEL'
 
 
-OPENAI_PROVIDER_MODEL_LABEL='OpenAI'
 OPENAI_API_LABEL='OPEN_API_KEY'
 OPENAI_MODEL_LABEL='OPENAI_MODEL'
+
+SCOPES = ['https://www.googleapis.com/auth/tasks.readonly']
+LIST_TRACKER='tasks/tracker.txt'
+
+GOOGLE_CRED='config/credentials.json'
+LOCAL_CRED='tasks/token.pickle'

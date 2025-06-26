@@ -12,7 +12,6 @@ class GeminiProvider(BaseProvider):
         from llm.base_response import BaseResponse
 
 
-        task='Do 100 pushups over the day'
         client = genai.Client(api_key=self.api)
 
         response = client.models.generate_content(

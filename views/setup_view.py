@@ -5,6 +5,7 @@ from config.question_model import ProviderQuestions
 class SetupView:
     @staticmethod
     def ask_llm_setup(questions,env_config=None):
+        print(env_config)
         answers={}
         for question in questions:
             answer = questionary.select(
