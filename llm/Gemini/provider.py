@@ -13,10 +13,9 @@ class GeminiProvider(BaseProvider):
 
 
         client = genai.Client(api_key=self.api)
-
         response = client.models.generate_content(
             model=model,
-            contents=SCHEME.format(categories=self.get_category,task=task),
+            contents=SCHEME.format(categories=self.categories,task=task),
             config={
             "response_mime_type": "application/json",
             "response_schema": BaseResponse,

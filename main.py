@@ -4,14 +4,15 @@ from dotenv import dotenv_values
 import os.path
 import pickle
 import argparse
+import ast
 
 
 from config.setup import Setup
 from config.constants import CONFIG_FILE,LIST_TRACKER,SCOPES
 from llm import GetProvider
 import tasks 
-from tasks.temp import TrackerProvider
-
+from tasks.getTasks import TrackerProvider
+from views.tasks_view import TaskView
             
 if __name__ == '__main__':
     setup_obj=Setup()
@@ -37,6 +38,7 @@ if __name__ == '__main__':
     )
     parser.add_argument('--version', action='version', version='v0.1.0')
     
+    provider,model=GetProvider.return_provider(env.get("MODEL"),env)
     args = parser.parse_args()
     if args.add:
         if tasks_obj.add_new_tracker(args.add):
@@ -44,13 +46,14 @@ if __name__ == '__main__':
     if args.setup:
         setup_obj.setup()         
     if args.list:
-        print(tasks_obj.read_local_list())
+        TaskView.display_task_lists(tasks_obj.read_local_list())
     if not args.list:
         titles=tasks_obj.read_local_list()
-        print(tasks_obj.list_google_tasks(titles))
+        response=tasks_obj.list_google_tasks(titles,provider,model)
+        for t in response.keys():
+            TaskView.display_tasks(response[t])
     
     
     # # Code that runs the provider
-    # provider,model=GetProvider.return_provider(env.get("MODEL"),env)
     # print(model)
     # print(provider.get_category('Coded side project',model))

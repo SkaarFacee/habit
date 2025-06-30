@@ -1,7 +1,9 @@
 CONFIG_FILE='.habit'
 SCHEME="""
-    You are a usefull personal assitant that will categorize a task into the following categories {categories} based on the task. 
+    THE ONLY CATEFORIES THAT YOU ARE AWARE OF ARE{categories}
+    You are a usefull personal assitant that will categorize a task into the following categories {categories} based on the task.  
     You are also fully capable of describing the task in hand as EASY,MEDIUM,HARD
+    
     
     ============
     This is the task 
@@ -18,7 +20,7 @@ OPENAI_API_LABEL='OPEN_API_KEY'
 OPENAI_MODEL_LABEL='OPENAI_MODEL'
 
 SCOPES = ['https://www.googleapis.com/auth/tasks.readonly']
-LIST_TRACKER='tasks/tracker.txt'
+LIST_TRACKER='config/tracker.json'
 
 GOOGLE_CRED='config/credentials.json'
-LOCAL_CRED='tasks/token.pickle'
+LOCAL_CRED='config/token.pickle'
