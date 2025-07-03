@@ -42,18 +42,18 @@ class TaskView:
 
         table = Table(title="✅ Task List", show_lines=True)
 
-        table.add_column("Index", style="cyan", justify="right")
         table.add_column("Title", style="bold green")
         table.add_column("Status", style="magenta")
         table.add_column("Due Date", style="yellow")
-        table.add_column("LLM", style="blue")
-
+        table.add_column("Category", style="cyan")
+        table.add_column("Difficulty", style="red")
 
         for idx, task in enumerate(task_list, 1):
-            title = task.get('title', 'No Title')
-            status = task.get('status', 'unknown')
-            due = task.get('due', 'No due date')
-            llm = task.get('llm_ouput', 'No response')
-            table.add_row(str(idx), title, status, due,str(llm))
+            title = task.get('title',)
+            status = task.get('status')
+            due = task.get('completed')
+            llm = task.get('llm_output')
+
+            table.add_row(title, status, due,llm['category'],llm['diificulty'])
 
         rprint(table)

@@ -3,7 +3,7 @@ from pathlib import Path
 from dotenv import dotenv_values, set_key
 
 from config import config
-from config.constants import CONFIG_FILE,GEMINI_MODEL_LABEL,OPENAI_MODEL_LABEL
+from config.constants import CONFIG_FILE,GEMINI_MODEL_LABEL,OPENAI_MODEL_LABEL,LIST_TRACKER
 from config.question_model import SelectProviderQuestions, SetupQuestions
 from llm.Gemini.setup import GeminiQuestions
 from llm.OpenAI.setup import OpenAIQuestions
@@ -24,8 +24,12 @@ class Setup:
                         follow_up_questions=OpenAIQuestions.get_questions()
                     )
                 ])]
-        if not config.config_path.exists():
-            config_data = SetupView.ask_llm_setup(self.questions)
+        if not (config.config_path.exists() and Path(LIST_TRACKER).exists()):
+            if config.config_path.exists():
+                old_config=dotenv_values(Path.home()/CONFIG_FILE)
+            else:
+                old_config=None
+            config_data = SetupView.ask_llm_setup(self.questions,old_config)
             self.save_config(config_data)
             print(f"✅ Saved config to {config.config_path}")
 

@@ -33,4 +33,12 @@ class SetupView:
                 default=str(default_answer) if env_config else ""
             ).ask()
         return {llm_questions.label:answer}
+    
+    @staticmethod
+    def ask_first_list():
+        list_name = questionary.text(
+            "📝 Enter the name of the task list you want to track (case-sensitive):"
+        ).ask()
+        return list_name.strip() if list_name else None
+
 

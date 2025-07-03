@@ -13,6 +13,7 @@ from llm import GetProvider
 import tasks 
 from tasks.getTasks import TrackerProvider
 from views.tasks_view import TaskView
+from views.setup_view import SetupView
             
 if __name__ == '__main__':
     setup_obj=Setup()
@@ -34,6 +35,7 @@ if __name__ == '__main__':
     parser.add_argument(
         "-a",
         "--add",
+        action='store_true',
         help="Add a list to be tracked"
     )
     parser.add_argument('--version', action='version', version='v0.1.0')
@@ -41,8 +43,8 @@ if __name__ == '__main__':
     provider,model=GetProvider.return_provider(env.get("MODEL"),env)
     args = parser.parse_args()
     if args.add:
-        if tasks_obj.add_new_tracker(args.add):
-            print(f"Added list: {args.add}")
+        if tasks_obj.add_new_tracker(SetupView.ask_first_list()):
+            pass
     if args.setup:
         setup_obj.setup()         
     if args.list:
@@ -50,10 +52,7 @@ if __name__ == '__main__':
     if not args.list:
         titles=tasks_obj.read_local_list()
         response=tasks_obj.list_google_tasks(titles,provider,model)
+        # Save the response
+        print(response)
         for t in response.keys():
             TaskView.display_tasks(response[t])
-    
-    
-    # # Code that runs the provider
-    # print(model)
-    # print(provider.get_category('Coded side project',model))

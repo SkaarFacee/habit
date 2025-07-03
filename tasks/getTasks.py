@@ -1,10 +1,11 @@
 from config.constants import LIST_TRACKER,SCOPES,GOOGLE_CRED,LOCAL_CRED
 from views.tasks_view import TaskView
-
+from views.setup_view import SetupView
 
 import pickle
 import os
 import json
+from datetime import datetime
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
@@ -32,10 +33,11 @@ class TrackerProvider:
 
         self.creds=creds
 
-
     def read_local_list(self):
         if not os.path.exists(LIST_TRACKER):
-            return set()
+            name=SetupView.ask_first_list()
+            with open(LIST_TRACKER, 'w') as f:
+                json.dump({"lists": [name]}, f)
         
         with open(LIST_TRACKER, 'r+') as f: 
             if os.fstat(f.fileno()).st_size == 0:
@@ -87,11 +89,10 @@ class TrackerProvider:
             TaskView.no_tasks_view()
             return
         
-        
         for tasklist in items:
             if tasklist['title'].strip() in tracked_titles:
                 flag=False
-                tasks = service.tasks().list(tasklist=tasklist['id']).execute()
+                tasks = service.tasks().list(tasklist=tasklist['id'],showHidden=True).execute()
                 task_items = tasks.get('items', [])
                 tasks_info[tasklist['title'].strip()]=self.parallel_process_tasks(task_items,provider,model)
 
@@ -99,14 +100,13 @@ class TrackerProvider:
             TaskView.no_title_view()
         else:
             return tasks_info
-        
 
     def enrich_task(self,task, provider, model):
         return {
             'title': task.get('title', 'No Title'),
-            'status': task.get('status', 'unknown'),
-            'due': task.get('due', 'No due date'),
-            'llm_output': provider.get_category('Coded side project', model),
+            'status': task.get('status', 'In-progess'),
+            'completed': datetime.strptime(task.get('completed', ''), "%Y-%m-%dT%H:%M:%S.%fZ").strftime("%d-%m-%Y") if task.get('completed') else 'Not complete',
+            'llm_output': provider.get_category(task.get('title', 'No Title'), model),
         }
 
     def parallel_process_tasks(self,task_items, provider, model):
