@@ -14,11 +14,13 @@ import tasks
 from tasks.getTasks import TrackerProvider
 from views.tasks_view import TaskView
 from views.setup_view import SetupView
-            
+from utils import SaveUtils
+
 if __name__ == '__main__':
     setup_obj=Setup()
     tasks_obj=TrackerProvider()
     env=dotenv_values(Path.home()/CONFIG_FILE)
+    save_utils=SaveUtils()
     parser = argparse.ArgumentParser(description="CLI app to access Google Tasks")
     parser.add_argument(
         "-s",
@@ -52,7 +54,7 @@ if __name__ == '__main__':
     if not args.list:
         titles=tasks_obj.read_local_list()
         response=tasks_obj.list_google_tasks(titles,provider,model)
-        # Save the response
-        print(response)
+
+        save_utils.save(response)
         for t in response.keys():
             TaskView.display_tasks(response[t])
