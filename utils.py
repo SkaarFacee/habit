@@ -1,9 +1,12 @@
-from config.constants import LIST_TRACKER
+from config.constants import LIST_TRACKER,FIREBASE_CRED
 
 import json
 from datetime import datetime
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from datetime import datetime, MAXYEAR
+from datetime import datetime, MAXYEAR,timedelta
+
+import firebase_admin
+from firebase_admin import credentials, firestore
 
 class SaveUtils: 
     def __init__(self):
@@ -54,20 +57,37 @@ class SaveUtils:
         
         self.create_json(tracker_entries)
         
+
         for list_name in self.data['lists']:
             tracker = self.data['Tracker'][list_name]
-            for date_key in list(tracker.keys()):
-                tasks = tracker[date_key]
-                not_complete_titles = {
-                    x['title']
-                    for x in response.get(list_name, [])
-                    if x['completed'] == 'Not complete'
-                }
-                tracker[date_key] = [
-                    task for task in tasks if task['title'] not in not_complete_titles
-                ]
-                if not tracker[date_key]:
-                    del tracker[date_key]
+            
+            # Sort dates as datetime objects
+            dates = sorted(
+                tracker.keys(),
+                key=lambda x: datetime.strptime(x, '%d-%m-%Y')
+            )
+            
+            # Convert last date to datetime object
+            last_date = datetime.strptime(dates[-1], '%d-%m-%Y')
+            week_ago = last_date - timedelta(days=7)
+            
+            for date_key in dates:
+                current_date = datetime.strptime(date_key, '%d-%m-%Y')
+                
+                if current_date > week_ago:
+                    tasks = tracker[date_key]
+                    not_complete_titles = {
+                        x['title']
+                        for x in response.get(list_name, [])
+                        if x['completed'] == 'Not complete'
+                    }
+                    tracker[date_key] = [
+                        task for task in tasks if task['title'] not in not_complete_titles
+                    ]
+                    
+                    if not tracker[date_key]:
+                        print(f'Deleting entery {tracker[date_key]}')
+                        del tracker[date_key]
         self.save_json()
 
 
@@ -110,3 +130,15 @@ class SaveUtils:
 
     def save_json(self):
         json.dump(self.data,open(LIST_TRACKER,'w'))
+        Firebase().push(self.data)
+
+
+class Firebase():
+    def __init__(self):
+        cred = credentials.Certificate(FIREBASE_CRED)
+        firebase_admin.initialize_app(cred)
+        self.db = firestore.client()
+
+    def push(self,json):
+        doc_ref = self.db.collection("habit").document("tracker")
+        doc_ref.set(json)

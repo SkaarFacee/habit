@@ -1,0 +1,3 @@
+config/credentials.json
+config/firebase.json
+config/token.pickle

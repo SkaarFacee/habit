@@ -24,3 +24,4 @@ LIST_TRACKER='config/tracker.json'
 
 GOOGLE_CRED='config/credentials.json'
 LOCAL_CRED='config/token.pickle'
+FIREBASE_CRED='config/firebase.json'
