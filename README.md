@@ -1,7 +1,64 @@
-# 🛠️ Project Setup Guide
+# 🚀 Habit Tracker & AI-Powered Task Categorizer
+
+This project is a powerful command-line interface (CLI) tool designed to help you track and categorize your Google Tasks using the power of Artificial Intelligence. It integrates with Google Tasks to fetch your daily activities, leverages Large Language Models (LLMs) to automatically categorize them, and provides a visual heatmap to help you understand your productivity and habits over time.
+
+## ✨ Motivation
+
+In today's fast-paced world, understanding how we spend our time and what types of tasks dominate our days is crucial for personal growth and productivity. This tool aims to provide insights into your daily habits by:
+
+*   **Automating Task Analysis**: Eliminating the manual effort of categorizing tasks.
+*   **Visualizing Activity**: Offering a clear, at-a-glance overview of your work, play, and health activities.
+*   **Promoting Self-Awareness**: Helping you identify patterns, balance your efforts, and make informed decisions about your time allocation.
+
+## 🌟 Features
+
+*   **Google Tasks Integration**: Seamlessly connects with your Google Tasks account to retrieve your task lists and individual tasks.
+*   **AI-Powered Task Categorization**: Utilizes advanced Large Language Models (LLMs) such as Google Gemini (with optional support for OpenAI models) to automatically classify your tasks into predefined categories (e.g., Work, Play, Health) and assign a difficulty level (EASY, MEDIUM, HARD). This intelligent categorization provides deeper insights into your task load.
+*   **Comprehensive CLI Interface**:
+    *   `--setup` (`-s`): Guides you through the initial configuration process, including setting up Google API credentials and LLM API keys.
+    *   `--list` (`-l`): Displays all your currently tracked Google Task lists and the tasks within them, enriched with AI-generated categories and difficulty.
+    *   `--add` (`-a`): Allows you to easily add new Google Task lists to be tracked by the application.
+*   **Interactive Activity Heatmap**: Generates a visually engaging HTML heatmap (similar to GitHub contribution graphs) that represents your daily activity. Each day is colored based on the dominant task category and intensity, providing a quick overview of your productivity trends.
+*   **Persistent Data Storage**: All categorized task data is securely stored in Google Firebase Firestore, allowing for historical tracking, analysis, and future enhancements.
+
+## 🛠️ Tech Stack
+
+*   **Backend**: Python
+*   **Task Management**: Google Tasks API
+*   **Artificial Intelligence**: Google Generative AI (Gemini), OpenAI API (optional)
+*   **Database**: Google Firebase Firestore
+*   **Authentication**: Google OAuth2
+*   **Frontend (Visualization)**: HTML, CSS, JavaScript (for the standalone heatmap)
+
+## 🚀 Getting Started
+
+### Prerequisites
+
+Before you begin, ensure you have the following installed:
+
+*   Python 3.x
+*   Git
+*   A Google Cloud Platform (GCP) account
+*   A Firebase project
+*   An API key for Google Gemini (or OpenAI, if preferred)
+
+### Installation
+
+1.  **Clone the repository**:
+    ```bash
+    git clone https://github.com/Skaarfacee/habit.git
+    cd habit
+    ```
+
+2.  **Install Python dependencies**:
+    ```bash
+    pip install -r requirements.txt
+    ```
+
+#### 🛠️ Project Setup Guide
 
 This section outlines the steps required to configure the Google Tasks API and Firebase Storage for this project. Please follow each part carefully to ensure the system functions correctly.
-## 📌 Prerequisites
+#### 📌 Prerequisites
 
 Before you begin, make sure you have the following installed on your machine:
 
@@ -10,11 +67,11 @@ Before you begin, make sure you have the following installed on your machine:
 - Access to the Google Cloud Console
 - Access to Firebase Console
 
-## 🔧 Setting up Google Tasks API
+#### 🔧 Setting up Google Tasks API
 
 To enable your app to interact with the Google Tasks API follow the steps below:
 
-### Go to Google Cloud Console
+##### Go to Google Cloud Console
 Navigate to: https://console.cloud.google.com
 
 - Create a New Project
@@ -46,7 +103,7 @@ Navigate to: https://console.cloud.google.com
 - Save the File
     - Place the downloaded `credentials.json` in the `config ` directory of the project 
 
-## 🔥 Setting up Firebase Storage
+#### 🔥 Setting up Firebase Storage
 
 To use Firebase for file storage, follow these steps:
 
@@ -66,12 +123,86 @@ To use Firebase for file storage, follow these steps:
     - Click Generate New Private Key
     - This will download a `firebase.json` file containing your Firebase Admin SDK credentials
 - Save the File
-    - Place this `firebase.json` in the `config` directory,
+    - Place this `firebase.json` in the `config` directory
 
-# ✅ Final Notes
+#### **LLM API Key Setup**:
 
-DO NOT commit your credentials.json files to version control (e.g., GitHub). Add them to `.gitignore` to prevent accidental exposure of secrets.
+*   Add your Gemini API key (or OpenAI API key) when prompted while running the app 
 
-Ensure that the credentials are readable by your application and are kept secure.
+#### **Initial Application Setup**:
+Run the setup command to initialize the application and authenticate with Google Tasks:
+    ```bash
+    python main.py --setup
+    ```
 
-These credentials allow access to sensitive resources — treat them as secrets.
+## 💡 Usage
+
+### Command-Line Interface (CLI)
+
+*   **Run the setup wizard**:
+    ```bash
+    python main.py --setup
+    ```
+*   **List your tracked Google Task lists and tasks**:
+    ```bash
+    python main.py --list
+    ```
+*   **Add a new Google Task list to be tracked**:
+    ```bash
+    python main.py --add
+    ```
+    You will be prompted to enter the name of the task list.
+
+### Activity Heatmap (WIP)
+
+The `index.html` file provides a visual heatmap of your categorized activities. This file is currently a standalone visualization. To view your heatmap:
+
+1.  After running the `main.py` script (which processes and saves data to Firebase), you would typically export the processed data into a format consumable by `index.html`.
+2.  Open `index.html` directly in your web browser.
+
+*Note: The `index.html` currently contains hardcoded sample data. For real-time visualization, you would need to implement a mechanism to dynamically populate the `DATA` variable in `index.html` with the data from Firebase Firestore.*
+
+## 📂 Project Structure
+
+```
+.
+├── config/                 # Configuration files, constants, API credentials
+│   ├── constants.py        # Defines constants like API labels, categories, file paths
+│   ├── credentials.json    # Google Tasks API credentials (user-provided)
+│   ├── firebase.json       # Firebase Admin SDK credentials (user-provided)
+│   ├── tracker.json        # Stores names of Google Task lists being tracked
+│   └── ...
+├── llm/                    # Large Language Model (LLM) integration
+│   ├── base_provider.py    # Base class for LLM providers
+│   ├── base_response.py    # Base class for LLM response schema
+│   ├── Gemini/             # Gemini LLM specific implementation
+│   │   └── provider.py
+│   └── OpenAI/             # OpenAI LLM specific implementation (optional)
+│       └── provider.py
+├── tasks/                  # Logic for Google Tasks interaction and task processing
+│   ├── getTasks.py         # Handles Google Tasks API calls, authentication, and task enrichment
+│   └── ...
+├── views/                  # User interface components
+│   ├── setup_view.py       # CLI views for setup process
+│   ├── tasks_view.py       # CLI views for displaying tasks
+│   └── index.html          # Standalone HTML for activity heatmap visualization
+├── main.py                 # Main application entry point and CLI argument parser
+├── utils.py                # Utility functions, including Firebase Firestore integration
+├── .env                    # Environment variables (e.g., LLM API keys)
+├── .gitignore              # Specifies intentionally untracked files to ignore
+├── README.md               # This comprehensive guide
+└── ...
+```
+
+## 🤝 Contributing
+
+Contributions are welcome! If you have suggestions for improvements, new features, or bug fixes, please feel free to open an issue or submit a pull request.
+
+## 📄 License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+
+## TO-DO 
+- [ ] Finalize on whether a android widget or html would be better
+- [ ] Build the OpenAI and ollama provider 
