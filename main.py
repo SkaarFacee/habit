@@ -20,6 +20,7 @@ import json
 if __name__ == '__main__':
     firebase_obj=Firebase()
     tracker_data = firebase_obj.get()
+    print(tracker_data)
     if tracker_data:
         with open(LIST_TRACKER, 'w') as f:
             json.dump(tracker_data, f)
@@ -60,8 +61,6 @@ if __name__ == '__main__':
     if not args.list:
         titles=tasks_obj.read_local_list()
         response=tasks_obj.list_google_tasks(titles,provider,model)
-        # import pickle
-        # response=pickle.load(open('./response.pkl','rb'))
         save_utils.save(response,firebase_obj)
         for t in response.keys():
             TaskView.display_tasks(response[t])
