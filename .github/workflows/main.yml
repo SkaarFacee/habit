@@ -34,9 +34,9 @@ jobs:
 
       - name: Create .habit file in home directory
         run: |
-          echo "MODEL=GEMINI_MODEL" > ~/.habit
-          echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" >> ~/.habit
-          echo "GEMINI_MODEL=gemini-2.0-flash"
+          echo "export MODEL=GEMINI_MODEL" >> ~/.habit
+          echo "export GEMINI_API_KEY='${{ secrets.GEMINI_API_KEY }}'" >> ~/.habit
+          echo "export GEMINI_MODEL='gemini-2.0-flash'" >> ~/.habit
           
       - name: Run task categorization
         run: python main.py
