@@ -1,0 +1,42 @@
+name: Daily Task Categorization
+
+on:
+  schedule:
+    - cron: '0 0 * * *' # Runs every day at midnight
+  workflow_dispatch: # Allows manual triggering
+
+jobs:
+  categorize-tasks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Create config directory
+        run: mkdir -p config
+
+      - name: Decode Google API Credentials
+        run: echo "${{ secrets.CREDENTIALS_JSON }}" | base64 --decode > config/credentials.json
+
+      - name: Decode Firebase Credentials
+        run: echo "${{ secrets.FIREBASE_JSON }}" | base64 --decode > config/firebase.json
+        
+      - name: Decode Google Token
+        run: echo "${{ secrets.TOKEN_PICKLE }}" | base64 --decode > config/token.pickle
+
+      - name: Create .habit file in home directory
+        run: |
+          echo "MODEL=GEMINI_MODEL" > ~/.habit
+          echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" >> ~/.habit
+          echo "GEMINI_MODEL=gemini-2.0-flash"
+          
+      - name: Run task categorization
+        run: python main.py

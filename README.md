@@ -194,6 +194,52 @@ The `index.html` file provides a visual heatmap of your categorized activities. 
 └── ...
 ```
 
+## 🤖 Automating with GitHub Actions
+
+This project includes a GitHub Actions workflow to automatically run the task categorization script on a daily schedule. To enable this, you need to configure the following secrets in your GitHub repository settings.
+
+### Setting up GitHub Secrets
+
+1.  **Navigate to your GitHub repository.**
+2.  Go to **Settings** > **Secrets and variables** > **Actions**.
+3.  Click **New repository secret** for each of the secrets below.
+
+#### Required Secrets
+
+*   `CREDENTIALS_JSON`:
+    *   **Content**: The base64 encoded content of your `credentials.json` file.
+    *   **How to get it**:
+        1. Run the following command in your terminal: `base64 -i config/credentials.json`
+        2. Copy the entire output.
+        3. In your GitHub repository, go to **Settings** > **Secrets and variables** > **Actions**, click **New repository secret**, name it `CREDENTIALS_JSON`, and paste the copied output into the "Value" field.
+
+*   `FIREBASE_JSON`:
+    *   **Content**: The base64 encoded content of your `firebase.json` file.
+    *   **How to get it**:
+        1. Run the following command in your terminal: `base64 -i config/firebase.json`
+        2. Copy the entire output.
+        3. In your GitHub repository, create a new secret named `FIREBASE_JSON` and paste the copied output into the "Value" field.
+
+*   `TOKEN_PICKLE`:
+    *   **Content**: The base64 encoded content of your `token.pickle` file.
+    *   **How to get it**:
+        1. This file is generated after you run the application for the first time with the `--setup` flag and authenticate with your Google account.
+        2. Once the `config/token.pickle` file is created, run the following command: `base64 -i config/token.pickle`
+        3. Copy the entire output.
+        4. In your GitHub repository, create a new secret named `TOKEN_PICKLE` and paste the copied output into the "Value" field.
+
+*   `GEMINI_API_KEY`:
+    *   **Content**: Your API key for the Google Gemini.
+    *   **How to get it**:
+        1. In your GitHub repository, create a new secret named `GEMINI_API_KEY`.
+        2. Paste your actual API key for Gemini into the "Value" field.
+
+The workflow is now configured to use the Gemini model (`gemini-2.0-flash`) by default. You only need to provide the API key.
+
+**Note on `tracker.json`**: You no longer need to provide `tracker.json` as a secret. The workflow now automatically fetches the latest task data from Firebase at the beginning of each run and pushes the updated data back at the end. This ensures your tracked tasks are always in sync.
+
+Once these secrets are configured, the GitHub Action will run automatically every day at midnight, keeping your task data up-to-date.
+
 ## 🤝 Contributing
 
 Contributions are welcome! If you have suggestions for improvements, new features, or bug fixes, please feel free to open an issue or submit a pull request.
@@ -203,6 +249,6 @@ Contributions are welcome! If you have suggestions for improvements, new feature
 This project is licensed under the MIT License - see the LICENSE file for details.
 
 
-## TO-DO 
+## TO-DO
 - [ ] Finalize on whether a android widget or html would be better
-- [ ] Build the OpenAI and ollama provider 
+- [ ] Build the OpenAI and ollama provider

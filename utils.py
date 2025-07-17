@@ -9,10 +9,6 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 
 class SaveUtils: 
-    def __init__(self):
-        self.refresh()
-
-
     def refresh(self):
         self.data=json.load(open(LIST_TRACKER,'r'))
         if 'Tracker' not in self.data.keys():
@@ -43,7 +39,7 @@ class SaveUtils:
         formatted_entries = {date: items for date, items in grouped_by_date.items()}
         return {list_name: formatted_entries}
 
-    def save(self, response):
+    def save(self, response,firebase_obj):
         self.refresh()
         tracker_entries = []
 
@@ -88,14 +84,11 @@ class SaveUtils:
                     if not tracker[date_key]:
                         print(f'Deleting entery {tracker[date_key]}')
                         del tracker[date_key]
-        self.save_json()
-
+        self.save_json(firebase_obj)
 
 
     def create_json(self, tracker_entries):
         tracker = self.data['Tracker']
-        import json 
-        json.dump(tracker_entries,open('tracker_entries.json','w'))
         for entry in tracker_entries:
             for list_name, dates in entry.items():
                 list_data = tracker.setdefault(list_name, {})
@@ -128,9 +121,9 @@ class SaveUtils:
 
 
 
-    def save_json(self):
+    def save_json(self,firebase_obj):
         json.dump(self.data,open(LIST_TRACKER,'w'))
-        Firebase().push(self.data)
+        firebase_obj.push(self.data)
 
 
 class Firebase():
@@ -142,3 +135,11 @@ class Firebase():
     def push(self,json):
         doc_ref = self.db.collection("habit").document("tracker")
         doc_ref.set(json)
+    
+    def get(self):
+        doc_ref = self.db.collection("habit").document("tracker")
+        doc = doc_ref.get()
+        if doc.exists:
+            return doc.to_dict()
+        else:
+            return None

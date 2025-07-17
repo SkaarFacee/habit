@@ -7,6 +7,7 @@ from config.constants import CONFIG_FILE,GEMINI_MODEL_LABEL,OPENAI_MODEL_LABEL,L
 from config.question_model import SelectProviderQuestions, SetupQuestions
 from llm.Gemini.setup import GeminiQuestions
 from llm.OpenAI.setup import OpenAIQuestions
+from tasks.getTasks import TrackerProvider
 from views.setup_view import SetupView
 class Setup: 
     def __init__(self):
@@ -24,6 +25,7 @@ class Setup:
                         follow_up_questions=OpenAIQuestions.get_questions()
                     )
                 ])]
+        # Runs if config and tracker is not there 
         if not (config.config_path.exists() and Path(LIST_TRACKER).exists()):
             if config.config_path.exists():
                 old_config=dotenv_values(Path.home()/CONFIG_FILE)
