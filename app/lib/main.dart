@@ -2,80 +2,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'dart:math';
+import 'shared/neon_ribbon_background.dart';
+import 'shared/theme.dart';
+import 'insights_screen.dart';
 
-// --- Theme Management ---
-class AppTheme {
-  static final ThemeData lightTheme = ThemeData(
-    brightness: Brightness.light,
-    primaryColor: const Color(0xFF0066CC),
-    scaffoldBackgroundColor: const Color(0xFFF2F2F7),
-    colorScheme: const ColorScheme.light(
-      primary: Color(0xFF0066CC),
-      secondary: Color(0xFFD1E9FF),
-      surface: Colors.white,
-      onPrimary: Colors.white,
-      onSecondary: Color(0xFF0066CC),
-      onSurface: Colors.black,
-      onError: Colors.white,
-    ),
-    useMaterial3: true,
-    fontFamily: 'Inter',
-    appBarTheme: const AppBarTheme(
-      backgroundColor: Colors.transparent, // Make AppBar transparent
-      elevation: 0,
-      titleTextStyle: TextStyle(
-        color: Colors.black,
-        fontSize: 34,
-        fontWeight: FontWeight.bold,
-        fontFamily: 'Inter',
-      ),
-      iconTheme: IconThemeData(color: Color(0xFF0066CC)),
-    ),
-    textTheme: const TextTheme(
-      bodyLarge: TextStyle(fontFamily: 'Inter', color: Colors.black87),
-      bodyMedium: TextStyle(fontFamily: 'Inter', color: Colors.black54),
-      titleLarge: TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.bold, color: Colors.black),
-      headlineSmall: TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w600, color: Colors.black),
-    ),
-  );
-
-  static final ThemeData darkTheme = ThemeData(
-    brightness: Brightness.dark,
-    primaryColor: const Color(0xFFE84545),
-    scaffoldBackgroundColor: const Color(0xFF121212),
-    colorScheme: const ColorScheme.dark(
-      primary: Color(0xFFE84545),
-      secondary: Color(0xFF903749),
-      surface: Color(0xFF1E1E1E),
-      onPrimary: Colors.white,
-      onSecondary: Colors.white,
-      onSurface: Colors.white,
-      onError: Colors.white,
-    ),
-    useMaterial3: true,
-    fontFamily: 'Inter',
-    appBarTheme: const AppBarTheme(
-      backgroundColor: Colors.transparent, // Make AppBar transparent
-      elevation: 0,
-      titleTextStyle: TextStyle(
-        color: Colors.white,
-        fontSize: 34,
-        fontWeight: FontWeight.bold,
-        fontFamily: 'Inter',
-      ),
-      iconTheme: IconThemeData(color: Color(0xFFE84545)),
-    ),
-    textTheme: const TextTheme(
-      bodyLarge: TextStyle(fontFamily: 'Inter', color: Colors.white),
-      bodyMedium: TextStyle(fontFamily: 'Inter', color: Colors.white70),
-      titleLarge: TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.bold),
-      headlineSmall: TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w600),
-    ),
-  );
-}
-
-final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier(ThemeMode.dark);
 
 // Main app entry point
 void main() async {
@@ -106,62 +36,6 @@ class MyApp extends StatelessWidget {
   }
 }
 
-// Neon Ribbon background widget
-class NeonRibbonBackground extends StatelessWidget {
-  const NeonRibbonBackground({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final colors = isDark
-        ? [const Color(0xFFE84545), const Color(0xFF5E5CE6), const Color(0xFF34C759)]
-        : [const Color(0xFF0066CC), const Color(0xFFD1E9FF), const Color(0xFFFF9500)];
-
-    return Stack(
-      children: [
-        Positioned.fill(
-          child: Container(color: Theme.of(context).scaffoldBackgroundColor),
-        ),
-        ...List.generate(3, (index) {
-          return Positioned(
-            top: (index * 200) + 100,
-            left: -200,
-            child: Animate(
-              onPlay: (controller) => controller.repeat(reverse: true),
-              effects: [
-                MoveEffect(
-                  duration: (5 + index * 2).seconds,
-                  begin: const Offset(-50, 0),
-                  end: const Offset(50, 0),
-                  curve: Curves.easeInOutSine,
-                ),
-              ],
-              child: Transform.rotate(
-                angle: -pi / 4,
-                child: Container(
-                  width: 500,
-                  height: 50,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [colors[index].withOpacity(0), colors[index].withOpacity(0.3), colors[index].withOpacity(0)],
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: colors[index].withOpacity(0.4),
-                        blurRadius: 50,
-                        spreadRadius: 10,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          );
-        }),
-      ],
-    );
-  }
-}
 
 // Main screen for tracking work
 class WorkTrackerScreen extends StatelessWidget {
@@ -323,7 +197,7 @@ class WorkTrackerScreen extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildSummaryCard(trackerData).animate().fadeIn(duration: 600.ms).slideY(begin: 0.2, curve: Curves.easeOutCubic),
+          _buildSummaryCard(context, trackerData).animate().fadeIn(duration: 600.ms).slideY(begin: 0.2, curve: Curves.easeOutCubic),
           const SizedBox(height: 24),
           ...workListCards.animate(interval: 100.ms).fadeIn(duration: 500.ms).slideX(begin: -0.2, curve: Curves.easeOutCubic),
         ],
@@ -332,40 +206,59 @@ class WorkTrackerScreen extends StatelessWidget {
   }
 
   // Summary Card
-  Widget _buildSummaryCard(Map<String, dynamic> tracker) {
+  Widget _buildSummaryCard(BuildContext context, Map<String, dynamic> tracker) {
     final stats = _calculateOverallStats(tracker);
     final isDark = themeNotifier.value == ThemeMode.dark;
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: (isDark ? const Color(0xFF1E1E1E) : Colors.white).withOpacity(0.8),
-        borderRadius: BorderRadius.circular(20),
-        border: isDark ? Border.all(color: Colors.white12) : null,
-        boxShadow: isDark ? null : [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
-            blurRadius: 20,
-            offset: const Offset(0, 5),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-           Text('OVERVIEW', style: TextStyle(color: isDark ? const Color(0xFFE84545) : const Color(0xFF0066CC), fontSize: 16, fontWeight: FontWeight.w600, letterSpacing: 1.5)),
-          const SizedBox(height: 16),
-          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-            _buildSummaryItem('Active Days', stats['workDays'] ?? 0, Icons.calendar_today_outlined),
-            _buildSummaryItem('Total Tasks', stats['totalTasks'] ?? 0, Icons.outlined_flag),
-          ]),
-          const SizedBox(height: 12),
-          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-            _buildSummaryItem('Current Streak', stats['currentStreak'] ?? 0, Icons.local_fire_department_outlined),
-            _buildSummaryItem('This Week', stats['thisWeek'] ?? 0, Icons.date_range_outlined),
-          ]),
-        ],
+    return InkWell(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+              builder: (context) => InsightsScreen(
+                    trackerData: tracker,
+                  )),
+        );
+      },
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: (isDark ? const Color(0xFF1E1E1E) : Colors.white).withOpacity(0.8),
+          borderRadius: BorderRadius.circular(20),
+          border: isDark ? Border.all(color: Colors.white12) : null,
+          boxShadow: isDark
+              ? null
+              : [
+                  BoxShadow(
+                    color: Colors.grey.withOpacity(0.1),
+                    blurRadius: 20,
+                    offset: const Offset(0, 5),
+                  ),
+                ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('OVERVIEW', style: TextStyle(color: isDark ? const Color(0xFFE84545) : const Color(0xFF0066CC), fontSize: 16, fontWeight: FontWeight.w600, letterSpacing: 1.5)),
+                Icon(Icons.arrow_forward_ios_rounded, size: 16, color: isDark ? Colors.white54 : Colors.black54),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+              _buildSummaryItem('Active Days', stats['workDays'] ?? 0, Icons.calendar_today_outlined),
+              _buildSummaryItem('Total Tasks', stats['totalTasks'] ?? 0, Icons.outlined_flag),
+            ]),
+            const SizedBox(height: 12),
+            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+              _buildSummaryItem('Current Streak', stats['currentStreak'] ?? 0, Icons.local_fire_department_outlined),
+              _buildSummaryItem('This Week', stats['thisWeek'] ?? 0, Icons.date_range_outlined),
+            ]),
+          ],
+        ),
       ),
     );
   }
