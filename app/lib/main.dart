@@ -358,7 +358,7 @@ class WorkTrackerScreen extends StatelessWidget {
           const SizedBox(height: 16),
           Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
             _buildSummaryItem('Active Days', stats['workDays'] ?? 0, Icons.calendar_today_outlined),
-            _buildSummaryItem('Total Laps', stats['totalTasks'] ?? 0, Icons.outlined_flag),
+            _buildSummaryItem('Total Tasks', stats['totalTasks'] ?? 0, Icons.outlined_flag),
           ]),
           const SizedBox(height: 12),
           Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
@@ -476,7 +476,7 @@ class _AddWorkDialogState extends State<AddWorkDialog> {
       tag: 'add-lap-button',
       child: AlertDialog(
         backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
-        title: const Text('Log a Lap'),
+        title: const Text('Log a Task'),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -572,7 +572,7 @@ class _AddWorkDialogState extends State<AddWorkDialog> {
       return;
     }
     if (_titleController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter a lap description.')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter a task description.')));
       return;
     }
 
@@ -592,7 +592,7 @@ class _AddWorkDialogState extends State<AddWorkDialog> {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Lap saved!'), backgroundColor: Colors.green));
       }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error saving lap: $e'), backgroundColor: Colors.red));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error saving task: $e'), backgroundColor: Colors.red));
     }
   }
 
@@ -676,7 +676,7 @@ class WorkListCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Recent Laps', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
+          const Text('Recent Tasks', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
           const SizedBox(height: 12),
           ...recentEntries
               .take(3)
@@ -890,9 +890,9 @@ class ContributionGraph extends StatelessWidget {
 
     String tooltipMessage = '${date.day}-${date.month}-${date.year}\n';
     if (count > 0 && category != null) {
-      tooltipMessage += '$count ${category.toLowerCase()} ${count == 1 ? "lap" : "laps"}';
+      tooltipMessage += '$count ${category.toLowerCase()} ${count == 1 ? "task" : "tasks"}';
     } else {
-      tooltipMessage += 'No laps';
+      tooltipMessage += 'No tasks';
     }
 
     return Tooltip(
