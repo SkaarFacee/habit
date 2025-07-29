@@ -1,6 +1,81 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
+import 'dart:math';
+
+// --- Theme Management ---
+class AppTheme {
+  static final ThemeData lightTheme = ThemeData(
+    brightness: Brightness.light,
+    primaryColor: const Color(0xFF0066CC),
+    scaffoldBackgroundColor: const Color(0xFFF2F2F7),
+    colorScheme: const ColorScheme.light(
+      primary: Color(0xFF0066CC),
+      secondary: Color(0xFFD1E9FF),
+      surface: Colors.white,
+      onPrimary: Colors.white,
+      onSecondary: Color(0xFF0066CC),
+      onSurface: Colors.black,
+      onError: Colors.white,
+    ),
+    useMaterial3: true,
+    fontFamily: 'Inter',
+    appBarTheme: const AppBarTheme(
+      backgroundColor: Colors.transparent, // Make AppBar transparent
+      elevation: 0,
+      titleTextStyle: TextStyle(
+        color: Colors.black,
+        fontSize: 34,
+        fontWeight: FontWeight.bold,
+        fontFamily: 'Inter',
+      ),
+      iconTheme: IconThemeData(color: Color(0xFF0066CC)),
+    ),
+    textTheme: const TextTheme(
+      bodyLarge: TextStyle(fontFamily: 'Inter', color: Colors.black87),
+      bodyMedium: TextStyle(fontFamily: 'Inter', color: Colors.black54),
+      titleLarge: TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.bold, color: Colors.black),
+      headlineSmall: TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w600, color: Colors.black),
+    ),
+  );
+
+  static final ThemeData darkTheme = ThemeData(
+    brightness: Brightness.dark,
+    primaryColor: const Color(0xFFE84545),
+    scaffoldBackgroundColor: const Color(0xFF121212),
+    colorScheme: const ColorScheme.dark(
+      primary: Color(0xFFE84545),
+      secondary: Color(0xFF903749),
+      surface: Color(0xFF1E1E1E),
+      onPrimary: Colors.white,
+      onSecondary: Colors.white,
+      onSurface: Colors.white,
+      onError: Colors.white,
+    ),
+    useMaterial3: true,
+    fontFamily: 'Inter',
+    appBarTheme: const AppBarTheme(
+      backgroundColor: Colors.transparent, // Make AppBar transparent
+      elevation: 0,
+      titleTextStyle: TextStyle(
+        color: Colors.white,
+        fontSize: 34,
+        fontWeight: FontWeight.bold,
+        fontFamily: 'Inter',
+      ),
+      iconTheme: IconThemeData(color: Color(0xFFE84545)),
+    ),
+    textTheme: const TextTheme(
+      bodyLarge: TextStyle(fontFamily: 'Inter', color: Colors.white),
+      bodyMedium: TextStyle(fontFamily: 'Inter', color: Colors.white70),
+      titleLarge: TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.bold),
+      headlineSmall: TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w600),
+    ),
+  );
+}
+
+final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier(ThemeMode.dark);
 
 // Main app entry point
 void main() async {
@@ -15,28 +90,75 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      title: 'Work Tracker',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF007AFF),
-          brightness: Brightness.light,
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: themeNotifier,
+      builder: (_, mode, __) {
+        return MaterialApp(
+          debugShowCheckedModeBanner: false,
+          title: 'Work Tracker',
+          theme: AppTheme.lightTheme,
+          darkTheme: AppTheme.darkTheme,
+          themeMode: mode,
+          home: const WorkTrackerScreen(),
+        );
+      },
+    );
+  }
+}
+
+// Neon Ribbon background widget
+class NeonRibbonBackground extends StatelessWidget {
+  const NeonRibbonBackground({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colors = isDark
+        ? [const Color(0xFFE84545), const Color(0xFF5E5CE6), const Color(0xFF34C759)]
+        : [const Color(0xFF0066CC), const Color(0xFFD1E9FF), const Color(0xFFFF9500)];
+
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: Container(color: Theme.of(context).scaffoldBackgroundColor),
         ),
-        useMaterial3: true,
-        scaffoldBackgroundColor: const Color(0xFFF2F2F7),
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFFF2F2F7),
-          elevation: 0,
-          scrolledUnderElevation: 0,
-          titleTextStyle: TextStyle(
-            color: Color(0xFF1C1C1E),
-            fontSize: 34,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      ),
-      home: const WorkTrackerScreen(),
+        ...List.generate(3, (index) {
+          return Positioned(
+            top: (index * 200) + 100,
+            left: -200,
+            child: Animate(
+              onPlay: (controller) => controller.repeat(reverse: true),
+              effects: [
+                MoveEffect(
+                  duration: (5 + index * 2).seconds,
+                  begin: const Offset(-50, 0),
+                  end: const Offset(50, 0),
+                  curve: Curves.easeInOutSine,
+                ),
+              ],
+              child: Transform.rotate(
+                angle: -pi / 4,
+                child: Container(
+                  width: 500,
+                  height: 50,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [colors[index].withOpacity(0), colors[index].withOpacity(0.3), colors[index].withOpacity(0)],
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: colors[index].withOpacity(0.4),
+                        blurRadius: 50,
+                        spreadRadius: 10,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        }),
+      ],
     );
   }
 }
@@ -49,29 +171,48 @@ class WorkTrackerScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final DocumentReference trackerDoc =
         FirebaseFirestore.instance.collection('habit').doc('tracker');
+
     return Scaffold(
+      extendBodyBehindAppBar: true, // Allow body to go behind AppBar
       appBar: AppBar(
-        title: const Text('Work Tracker'),
+        title: const Text('Dashboard'),
         centerTitle: false,
+        actions: [
+          IconButton(
+            icon: Icon(
+              themeNotifier.value == ThemeMode.dark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
+            ),
+            onPressed: () {
+              themeNotifier.value = themeNotifier.value == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark;
+            },
+          ).animate().fade(delay: 200.ms).scale(),
+        ],
       ),
-      body: StreamBuilder<DocumentSnapshot>(
-        stream: trackerDoc.snapshots(),
-        builder: (context, snapshot) {
-          if (snapshot.hasError) return _buildErrorState();
-          if (snapshot.connectionState == ConnectionState.waiting) return _buildLoadingState();
-          if (!snapshot.hasData || !snapshot.data!.exists) {
-            print(snapshot.data);
-            return _buildEmptyState(() => _showAddWorkDialog(context, []));
-          }
-
-          final data = snapshot.data!.data() as Map<String, dynamic>;
-          final trackerData = data['Tracker'] as Map<String, dynamic>? ?? {};
-          final listNames = trackerData.keys.toList();
-
-          return _buildContent(context, trackerData, listNames);
-        },
+      body: Stack(
+        children: [
+          const NeonRibbonBackground(),
+          SafeArea( // Ensures content is not hidden by notches or system bars
+            child: StreamBuilder<DocumentSnapshot>(
+              stream: trackerDoc.snapshots(),
+              builder: (context, snapshot) {
+                if (snapshot.hasError) return _buildErrorState();
+                if (snapshot.connectionState == ConnectionState.waiting) return _buildLoadingState(context);
+                if (!snapshot.hasData || !snapshot.data!.exists) {
+                  return _buildEmptyState(() => _showAddWorkDialog(context, []));
+                }
+    
+                final data = snapshot.data!.data() as Map<String, dynamic>;
+                final trackerData = data['Tracker'] as Map<String, dynamic>? ?? {};
+                final listNames = trackerData.keys.toList();
+    
+                return _buildContent(context, trackerData, listNames);
+              },
+            ),
+          ),
+        ],
       ),
       floatingActionButton: FloatingActionButton(
+        heroTag: 'add-lap-button',
         onPressed: () {
           trackerDoc.get().then((doc) {
             final data = doc.data() as Map<String, dynamic>?;
@@ -79,39 +220,85 @@ class WorkTrackerScreen extends StatelessWidget {
             _showAddWorkDialog(context, trackerData.keys.toList());
           });
         },
-        backgroundColor: const Color(0xFF007AFF),
         child: const Icon(Icons.add, color: Colors.white),
-      ),
+      ).animate().scale(delay: 300.ms),
     );
   }
 
-  // Shows the dialog to add a new work entry
+  // Shows the dialog to add a new work entry with a custom animation
   void _showAddWorkDialog(BuildContext context, List<String> listNames) {
-    showDialog(
+    showGeneralDialog(
       context: context,
-      builder: (context) => AddWorkDialog(existingLists: listNames),
+      barrierDismissible: true,
+      barrierLabel: 'Dismiss',
+      pageBuilder: (context, animation, secondaryAnimation) {
+        return AddWorkDialog(existingLists: listNames);
+      },
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        return SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(0, 1),
+            end: Offset.zero,
+          ).animate(CurvedAnimation(parent: animation, curve: Curves.easeInOutCubic)),
+          child: child,
+        );
+      },
+      transitionDuration: 400.ms,
     );
   }
 
   // UI Widgets
-  Widget _buildLoadingState() => const Center(child: CircularProgressIndicator());
+  Widget _buildLoadingState(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final baseColor = isDark ? Colors.white10 : Colors.grey.shade200;
+    final highlightColor = isDark ? Colors.white.withOpacity(0.2) : Colors.grey.shade50;
+
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        children: [
+          Container(
+            height: 200,
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: baseColor,
+              borderRadius: BorderRadius.circular(20),
+            ),
+          ),
+          const SizedBox(height: 24),
+          Container(
+            height: 400,
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: baseColor,
+              borderRadius: BorderRadius.circular(16),
+            ),
+          ),
+        ],
+      ),
+    ).animate(onPlay: (controller) => controller.repeat()).shimmer(
+          duration: 1200.ms,
+          color: highlightColor,
+        );
+  }
+
   Widget _buildErrorState() => const Center(child: Text('Something went wrong'));
   Widget _buildEmptyState(VoidCallback onAdd) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.work_outline, size: 64, color: Colors.grey),
+          const Icon(Icons.flag_outlined, size: 64, color: Colors.grey),
           const SizedBox(height: 16),
-          const Text('No work tracked yet', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500)),
+          const Text('No Tracks Yet', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500)),
           const SizedBox(height: 8),
           TextButton(
             onPressed: onAdd,
-            child: const Text('Tap + to start tracking your work'),
+            child: const Text('Tap + to start a new track'),
           ),
         ],
       ),
-    );
+    ).animate().fadeIn(duration: 500.ms);
   }
 
   // Main content view with summary and lists
@@ -119,23 +306,26 @@ class WorkTrackerScreen extends StatelessWidget {
     if (listNames.isEmpty) {
       return _buildEmptyState(() => _showAddWorkDialog(context, []));
     }
+
+    List<Widget> workListCards = listNames.map((listName) {
+      final listData = trackerData[listName] as Map<String, dynamic>? ?? {};
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 24.0),
+        child: WorkListCard(
+          title: listName,
+          data: listData,
+        ),
+      );
+    }).toList();
+
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 80),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildSummaryCard(trackerData),
+          _buildSummaryCard(trackerData).animate().fadeIn(duration: 600.ms).slideY(begin: 0.2, curve: Curves.easeOutCubic),
           const SizedBox(height: 24),
-          ...listNames.map((listName) {
-            final listData = trackerData[listName] as Map<String, dynamic>? ?? {};
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 24.0),
-              child: WorkListCard(
-                title: listName,
-                data: listData,
-              ),
-            );
-          }).toList(),
+          ...workListCards.animate(interval: 100.ms).fadeIn(duration: 500.ms).slideX(begin: -0.2, curve: Curves.easeOutCubic),
         ],
       ),
     );
@@ -144,44 +334,60 @@ class WorkTrackerScreen extends StatelessWidget {
   // Summary Card
   Widget _buildSummaryCard(Map<String, dynamic> tracker) {
     final stats = _calculateOverallStats(tracker);
+    final isDark = themeNotifier.value == ThemeMode.dark;
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF007AFF), Color(0xFF5856D6)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        color: (isDark ? const Color(0xFF1E1E1E) : Colors.white).withOpacity(0.8),
         borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: const Color(0xFF007AFF).withOpacity(0.3), blurRadius: 20, offset: const Offset(0, 4))],
+        border: isDark ? Border.all(color: Colors.white12) : null,
+        boxShadow: isDark ? null : [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1),
+            blurRadius: 20,
+            offset: const Offset(0, 5),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Overall Summary', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600)),
+           Text('OVERVIEW', style: TextStyle(color: isDark ? const Color(0xFFE84545) : const Color(0xFF0066CC), fontSize: 16, fontWeight: FontWeight.w600, letterSpacing: 1.5)),
           const SizedBox(height: 16),
           Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-            _buildSummaryItem('Work Days', stats['workDays'].toString(), Icons.calendar_today),
-            _buildSummaryItem('Total Tasks', stats['totalTasks'].toString(), Icons.task_alt),
+            _buildSummaryItem('Active Days', stats['workDays'] ?? 0, Icons.calendar_today_outlined),
+            _buildSummaryItem('Total Laps', stats['totalTasks'] ?? 0, Icons.outlined_flag),
           ]),
           const SizedBox(height: 12),
           Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-            _buildSummaryItem('Work Streak', '${stats['currentStreak']} days', Icons.local_fire_department),
-            _buildSummaryItem('This Week', stats['thisWeek'].toString(), Icons.date_range),
+            _buildSummaryItem('Current Streak', stats['currentStreak'] ?? 0, Icons.local_fire_department_outlined),
+            _buildSummaryItem('This Week', stats['thisWeek'] ?? 0, Icons.date_range_outlined),
           ]),
         ],
       ),
     );
   }
 
-  Widget _buildSummaryItem(String label, String value, IconData icon) {
+  Widget _buildSummaryItem(String label, int value, IconData icon) {
     return Row(children: [
-      Icon(icon, color: Colors.white70, size: 20),
+      Icon(icon, size: 20),
       const SizedBox(width: 8),
       Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(value, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-        Text(label, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+        Animate()
+            .custom(
+              duration: 1000.ms,
+              curve: Curves.easeOutCubic,
+              begin: 0,
+              end: value.toDouble(),
+              builder: (_, val, __) => Text(
+                val.toInt().toString(),
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+            )
+            .fadeIn(),
+        Text(label, style: const TextStyle(fontSize: 12)),
       ]),
     ]);
   }
@@ -251,7 +457,7 @@ class _AddWorkDialogState extends State<AddWorkDialog> {
   DateTime _selectedDate = DateTime.now();
 
   final List<String> _difficulties = ['EASY', 'MEDIUM', 'HARD'];
-  final List<String> _categories = ['Work', 'Health', 'Learning', 'Personal'];
+  final List<String> _categories = ['Work', 'Health', 'Play'];
 
   @override
   void initState() {
@@ -265,79 +471,87 @@ class _AddWorkDialogState extends State<AddWorkDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Add Entry'),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // List Selection Dropdown or New List Text Field
-            if (widget.existingLists.isNotEmpty)
-              DropdownButtonFormField<String>(
-                value: _isNewList ? '---NEW---' : _selectedList,
-                decoration: const InputDecoration(labelText: 'List', border: OutlineInputBorder()),
-                items: [
-                  ...widget.existingLists.map((list) => DropdownMenuItem(value: list, child: Text(list))),
-                  const DropdownMenuItem(value: '---NEW---', child: Text('Create New List...')),
-                ],
-                onChanged: (value) {
-                  setState(() {
-                    if (value == '---NEW---') {
-                      _isNewList = true;
-                      _selectedList = null;
-                    } else {
-                      _isNewList = false;
-                      _selectedList = value;
-                    }
-                  });
-                },
-              ),
-            if (_isNewList)
-              Padding(
-                padding: const EdgeInsets.only(top: 16.0),
-                child: TextField(
-                  controller: _newListController,
-                  decoration: const InputDecoration(labelText: 'New List Name', border: OutlineInputBorder()),
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Hero(
+      tag: 'add-lap-button',
+      child: AlertDialog(
+        backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        title: const Text('Log a Lap'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // List Selection Dropdown or New List Text Field
+              if (widget.existingLists.isNotEmpty)
+                DropdownButtonFormField<String>(
+                  value: _isNewList ? '---NEW---' : _selectedList,
+                  decoration: const InputDecoration(labelText: 'Track', border: OutlineInputBorder()),
+                  items: [
+                    ...widget.existingLists.map((list) => DropdownMenuItem(value: list, child: Text(list))),
+                    const DropdownMenuItem(value: '---NEW---', child: Text('Create New Track...')),
+                  ],
+                  onChanged: (value) {
+                    setState(() {
+                      if (value == '---NEW---') {
+                        _isNewList = true;
+                        _selectedList = null;
+                      } else {
+                        _isNewList = false;
+                        _selectedList = value;
+                      }
+                    });
+                  },
                 ),
-              ),
+              if (_isNewList)
+                Padding(
+                  padding: const EdgeInsets.only(top: 16.0),
+                  child: TextField(
+                    controller: _newListController,
+                    decoration: const InputDecoration(labelText: 'New Track Name', border: OutlineInputBorder()),
+                  ),
+                ),
 
-            const SizedBox(height: 16),
-            TextField(
-              controller: _titleController,
-              decoration: const InputDecoration(labelText: 'Task Description', border: OutlineInputBorder()),
-              maxLines: 2,
-            ),
-            const SizedBox(height: 16),
-            DropdownButtonFormField<String>(
-              value: _selectedCategory,
-              decoration: const InputDecoration(labelText: 'Category', border: OutlineInputBorder()),
-              items: _categories.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
-              onChanged: (value) => setState(() => _selectedCategory = value!)),
-            const SizedBox(height: 16),
-            DropdownButtonFormField<String>(
-              value: _selectedDifficulty,
-              decoration: const InputDecoration(labelText: 'Difficulty', border: OutlineInputBorder()),
-              items: _difficulties.map((d) => DropdownMenuItem(value: d, child: Text(d))).toList(),
-              onChanged: (value) => setState(() => _selectedDifficulty = value!)),
-            const SizedBox(height: 16),
-            ListTile(
-              title: Text('Date: ${_selectedDate.toLocal().toString().split(' ')[0]}'),
-              trailing: const Icon(Icons.calendar_today),
-              onTap: _selectDate,
-              contentPadding: EdgeInsets.zero,
-            ),
-          ],
+              const SizedBox(height: 16),
+              TextField(
+                controller: _titleController,
+                decoration: const InputDecoration(labelText: 'Lap Description', border: OutlineInputBorder()),
+                maxLines: 2,
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                value: _selectedCategory,
+                decoration: const InputDecoration(labelText: 'Sector', border: OutlineInputBorder()),
+                items: _categories.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+                onChanged: (value) => setState(() => _selectedCategory = value!)),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                value: _selectedDifficulty,
+                decoration: const InputDecoration(labelText: 'Tire Compound', border: OutlineInputBorder()),
+                items: _difficulties.map((d) => DropdownMenuItem(value: d, child: Text(d))).toList(),
+                onChanged: (value) => setState(() => _selectedDifficulty = value!)),
+              const SizedBox(height: 16),
+              ListTile(
+                title: Text('Date: ${_selectedDate.toLocal().toString().split(' ')[0]}'),
+                trailing: const Icon(Icons.calendar_today),
+                onTap: _selectDate,
+                contentPadding: EdgeInsets.zero,
+              ),
+            ],
+          ),
         ),
-      ),
-      actions: [
-        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
-        ElevatedButton(
-          onPressed: _saveWorkEntry,
-          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF007AFF), foregroundColor: Colors.white),
-          child: const Text('Save'),
-        ),
-      ],
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: _saveWorkEntry,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: isDark ? const Color(0xFFE84545) : const Color(0xFF0066CC),
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Save Lap'),
+          ),
+        ],
+      ).animate().fadeIn(),
     );
   }
 
@@ -354,11 +568,11 @@ class _AddWorkDialogState extends State<AddWorkDialog> {
   Future<void> _saveWorkEntry() async {
     final listName = _isNewList ? _newListController.text.trim() : _selectedList;
     if (listName == null || listName.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please select or create a list.')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please select or create a track.')));
       return;
     }
     if (_titleController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter a task description.')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter a lap description.')));
       return;
     }
 
@@ -375,10 +589,10 @@ class _AddWorkDialogState extends State<AddWorkDialog> {
 
       if (mounted) {
         Navigator.of(context).pop();
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Entry saved successfully!'), backgroundColor: Colors.green));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Lap saved!'), backgroundColor: Colors.green));
       }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error saving entry: $e'), backgroundColor: Colors.red));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error saving lap: $e'), backgroundColor: Colors.red));
     }
   }
 
@@ -399,23 +613,31 @@ class WorkListCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: (isDark ? const Color(0xFF1E1E1E) : Colors.white).withOpacity(0.8),
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 2))],
+        border: isDark ? Border.all(color: Colors.white12) : null,
+        boxShadow: isDark ? null : [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1),
+            blurRadius: 20,
+            offset: const Offset(0, 5),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildHeader(),
-          const Divider(height: 1, indent: 20, endIndent: 20),
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
             child: ContributionGraph(data: data),
           ),
           if (_getRecentWorkEntries().isNotEmpty) ...[
-            const Divider(height: 1, indent: 20, endIndent: 20),
+            Divider(height: 1, indent: 20, endIndent: 20, color: isDark ? Colors.white12 : Colors.grey.shade200),
             _buildRecentWork(),
           ]
         ],
@@ -431,14 +653,22 @@ class WorkListCard extends StatelessWidget {
           Expanded(child: Text(title, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w600))),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(color: const Color(0xFF007AFF).withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
-            child: const Text('Last 365 Days', style: TextStyle(color: Color(0xFF007AFF), fontWeight: FontWeight.w600, fontSize: 14)),
+            decoration: BoxDecoration(
+              color: themeNotifier.value == ThemeMode.dark ? const Color(0xFFE84545).withOpacity(0.1) : const Color(0xFF0066CC).withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12)),
+            child: Text(
+              'Last 365 Days',
+              style: TextStyle(
+                color: themeNotifier.value == ThemeMode.dark ? const Color(0xFFE84545) : const Color(0xFF0066CC),
+                fontWeight: FontWeight.w600,
+                fontSize: 14),
+            ),
           ),
         ],
       ),
     );
   }
-  
+
   Widget _buildRecentWork() {
     final recentEntries = _getRecentWorkEntries();
     return Padding(
@@ -446,9 +676,15 @@ class WorkListCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Recent Activities', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Colors.grey[700])),
+          const Text('Recent Laps', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
           const SizedBox(height: 12),
-          ...recentEntries.take(3).map((entry) => _buildWorkItem(entry)),
+          ...recentEntries
+              .take(3)
+              .map((entry) => _buildWorkItem(entry))
+              .toList()
+              .animate(interval: 50.ms)
+              .fadeIn(duration: 300.ms)
+              .slideX(begin: -0.1, curve: Curves.easeOutCubic),
         ],
       ),
     );
@@ -456,10 +692,14 @@ class WorkListCard extends StatelessWidget {
 
   Widget _buildWorkItem(Map<String, dynamic> entry) {
     final category = entry['category']?.toString() ?? 'Work';
+    final isDark = themeNotifier.value == ThemeMode.dark;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(border: Border.all(color: Colors.grey[200]!), borderRadius: BorderRadius.circular(8)),
+      decoration: BoxDecoration(
+          color: isDark ? Colors.white.withOpacity(0.05) : Colors.grey.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(8)),
       child: Row(children: [
         Icon(_getIconForCategory(category), color: _getDifficultyColor(entry['difficulty']?.toString() ?? 'EASY'), size: 20),
         const SizedBox(width: 12),
@@ -468,7 +708,7 @@ class WorkListCard extends StatelessWidget {
           Text(entry['title']?.toString() ?? 'No title', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500), maxLines: 2, overflow: TextOverflow.ellipsis),
           if (entry['date'] != null) ...[
             const SizedBox(height: 4),
-            Text('${entry['date']} - $category', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+            Text('${entry['date']} - $category', style: TextStyle(fontSize: 12, color: isDark ? Colors.grey[400] : Colors.grey[600])),
           ]
         ])),
       ]),
@@ -497,19 +737,18 @@ class WorkListCard extends StatelessWidget {
 
   IconData _getIconForCategory(String category) {
     switch (category) {
-      case 'Health': return Icons.favorite_border;
-      case 'Learning': return Icons.school_outlined;
-      case 'Personal': return Icons.person_outline;
-      case 'Work':
-      default: return Icons.work_outline;
+      case 'Health': return Icons.directions_run;
+      case 'Work': return Icons.menu_book;
+      case 'Play': return Icons.sentiment_satisfied;
+      default: return Icons.flag;
     }
   }
 
   Color _getDifficultyColor(String difficulty) {
     switch (difficulty.toUpperCase()) {
-      case 'EASY': return const Color(0xFF34C759);
-      case 'MEDIUM': return const Color(0xFFFF9500);
-      case 'HARD': return const Color(0xFFFF3B30);
+      case 'EASY': return const Color(0xFF34C759); // Soft
+      case 'MEDIUM': return const Color(0xFFFF9500); // Medium
+      case 'HARD': return const Color(0xFFE84545); // Hard
       default: return Colors.grey;
     }
   }
@@ -545,18 +784,17 @@ class ContributionGraph extends StatelessWidget {
     return dataMap;
   }
 
-  Color _getColorForCategory(String? category) {
+  Color _getColorForCategory(BuildContext context, String? category) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     switch (category) {
       case 'Work':
-        return const Color(0xFF0077b6);
+        return isDark ? const Color(0xFF5E5CE6) : const Color(0xFF0066CC);
       case 'Health':
         return const Color(0xFF34C759);
-      case 'Learning':
+      case 'Play':
         return const Color(0xFFFF9500);
-      case 'Personal':
-        return const Color(0xFF5856D6);
       default:
-        return const Color(0xFFEBEDF0);
+        return isDark ? Colors.white.withOpacity(0.08) : Colors.grey.shade200;
     }
   }
 
@@ -568,20 +806,21 @@ class ContributionGraph extends StatelessWidget {
 
     final startDayOffset = oneYearAgo.weekday % 7;
     final totalDays = today.difference(oneYearAgo).inDays + 1 + startDayOffset;
+    final totalWeeks = (totalDays / 7).ceil();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SizedBox(
-          height: 140,
+          height: 120, // Height for graph cells
           child: LayoutBuilder(
             builder: (context, constraints) {
-              final double cellSize = (constraints.maxHeight - (7 * 3)) / 7; // Fixed calculation
+              final double cellSize = (constraints.maxHeight - (7 * 3)) / 7;
               return SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 reverse: true,
                 child: Row(
-                  children: List.generate((totalDays / 7).ceil(), (weekIndex) {
+                  children: List.generate(totalWeeks, (weekIndex) {
                     return Column(
                       children: List.generate(7, (dayIndex) {
                         final overallIndex = (weekIndex * 7) + dayIndex;
@@ -592,7 +831,10 @@ class ContributionGraph extends StatelessWidget {
                         if (date.isAfter(today)) {
                           return SizedBox(width: cellSize, height: cellSize);
                         }
-                        return _buildCell(date, workDataMap, cellSize);
+                        return _buildCell(context, date, workDataMap, cellSize)
+                            .animate()
+                            .fadeIn(delay: (overallIndex * 2).ms, duration: 400.ms)
+                            .scale(delay: (overallIndex * 2).ms, duration: 400.ms, curve: Curves.elasticOut, begin: const Offset(0.5, 0.5));
                       }),
                     );
                   }),
@@ -602,23 +844,55 @@ class ContributionGraph extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 12),
-        _buildLegend(),
+        _buildMonthLabelsRow(oneYearAgo, startDayOffset, totalWeeks),
+        const SizedBox(height: 16),
+        _buildLegend(context),
       ],
     );
   }
 
-  Widget _buildCell(DateTime date, Map<DateTime, Map<String, dynamic>> workDataMap, double size) {
+  Widget _buildMonthLabelsRow(DateTime startDate, int startDayOffset, int totalWeeks) {
+    final List<String> monthAbbreviations = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    List<Widget> labels = [];
+    int? lastMonth;
+    final double weekWidth = 15.0; // Approximate width of a week's column
+
+    for (int i = 0; i < totalWeeks; i++) {
+      DateTime date = startDate.add(Duration(days: (i * 7) - startDayOffset));
+      if (lastMonth == null || date.month != lastMonth) {
+        labels.add(
+          SizedBox(
+            width: weekWidth * 1.5,
+            child: Text(
+              monthAbbreviations[date.month - 1],
+              style: const TextStyle(fontSize: 10, color: Colors.grey),
+            ),
+          ),
+        );
+        lastMonth = date.month;
+      } else {
+        labels.add(SizedBox(width: weekWidth));
+      }
+    }
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      reverse: true,
+      child: Row(children: labels),
+    );
+  }
+
+  Widget _buildCell(BuildContext context, DateTime date, Map<DateTime, Map<String, dynamic>> workDataMap, double size) {
     final dateOnly = DateTime(date.year, date.month, date.day);
     final dayData = workDataMap[dateOnly];
     final category = dayData?['category'] as String?;
     final count = dayData?['count'] as int? ?? 0;
-    final color = _getColorForCategory(category);
+    final color = _getColorForCategory(context, category);
 
     String tooltipMessage = '${date.day}-${date.month}-${date.year}\n';
     if (count > 0 && category != null) {
-      tooltipMessage += '$count ${category.toLowerCase()} ${count == 1 ? "activity" : "activities"}';
+      tooltipMessage += '$count ${category.toLowerCase()} ${count == 1 ? "lap" : "laps"}';
     } else {
-      tooltipMessage += 'No activities';
+      tooltipMessage += 'No laps';
     }
 
     return Tooltip(
@@ -632,26 +906,30 @@ class ContributionGraph extends StatelessWidget {
     );
   }
 
-  Widget _buildLegend() {
-    final categories = ['Work', 'Health', 'Learning', 'Personal'];
+  Widget _buildLegend(BuildContext context) {
+    final categories = ['Work', 'Health', 'Play'];
+
+    List<Widget> legendItems = categories.expand((category) => [
+          Container(
+            width: 12,
+            height: 12,
+            decoration: BoxDecoration(
+              color: _getColorForCategory(context, category),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            category,
+            style: const TextStyle(fontSize: 12, color: Colors.grey),
+          ),
+          const SizedBox(width: 10),
+        ])
+        .toList();
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.end,
-      children: categories.expand((category) => [
-        Container(
-          width: 12,
-          height: 12,
-          decoration: BoxDecoration(
-            color: _getColorForCategory(category),
-            borderRadius: BorderRadius.circular(2),
-          ),
-        ),
-        const SizedBox(width: 4),
-        Text(
-          category,
-          style: const TextStyle(fontSize: 12, color: Colors.grey),
-        ),
-        const SizedBox(width: 10),
-      ]).toList(),
+      children: legendItems.animate(interval: 50.ms).fadeIn(duration: 300.ms).slideX(begin: -0.1),
     );
   }
 }
