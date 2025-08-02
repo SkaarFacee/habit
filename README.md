@@ -1,48 +1,61 @@
 # 🚀 Habit Tracker & AI-Powered Task Categorizer
 
-This project is a powerful command-line interface (CLI) tool designed to help you track and categorize your Google Tasks using the power of Artificial Intelligence. It integrates with Google Tasks to fetch your daily activities, leverages Large Language Models (LLMs) to automatically categorize them, and provides a visual heatmap to help you understand your productivity and habits over time.
+This project helps you track and categorize your Google Tasks using AI. It started as a command-line tool and now includes a **Flutter-based mobile app** to visualize your productivity and habits on the go. It integrates with Google Tasks to fetch your daily activities, leverages Large Language Models (LLMs) to automatically categorize them, and provides a visual heatmap to help you understand your productivity and habits over time.
+
+## 📱 The Habit Tracker App
+
+We now have a sleek and intuitive mobile application built with Flutter that brings your habit tracking to your fingertips. The app provides a beautiful interface to visualize your categorized tasks and gain insights into your daily routines.
+
+**Key Features of the App:**
+
+*   **Stunning Visualizations**: A beautiful, interactive heatmap of your daily activities.
+*   **Dynamic Theming**: Dark and light mode support.
+*   **Cross-Platform**: Built with Flutter for a consistent experience on both Android and iOS (iOS is WIP).
+
+*(Add screenshots of the app here)*
 
 ## ✨ Motivation
 
 In today's fast-paced world, understanding how we spend our time and what types of tasks dominate our days is crucial for personal growth and productivity. This tool aims to provide insights into your daily habits by:
 
 *   **Automating Task Analysis**: Eliminating the manual effort of categorizing tasks.
-*   **Visualizing Activity**: Offering a clear, at-a-glance overview of your work, play, and health activities.
+*   **Visualizing Activity**: Offering a clear, at-a-glance overview of your work, play, and health activities through both a CLI and a mobile app.
 *   **Promoting Self-Awareness**: Helping you identify patterns, balance your efforts, and make informed decisions about your time allocation.
 
 ## 🌟 Features
 
 *   **Google Tasks Integration**: Seamlessly connects with your Google Tasks account to retrieve your task lists and individual tasks.
-*   **AI-Powered Task Categorization**: Utilizes advanced Large Language Models (LLMs) such as Google Gemini (with optional support for OpenAI models) to automatically classify your tasks into predefined categories (e.g., Work, Play, Health) and assign a difficulty level (EASY, MEDIUM, HARD). This intelligent categorization provides deeper insights into your task load.
+*   **AI-Powered Task Categorization**: Utilizes advanced Large Language Models (LLMs) such as Google Gemini (with optional support for OpenAI models) to automatically classify your tasks into predefined categories (e.g., Work, Play, Health) and assign a difficulty level (EASY, MEDIUM, HARD).
+*   **Flutter Mobile App**: A dedicated mobile application to visualize your productivity heatmap.
 *   **Comprehensive CLI Interface**:
-    *   `--setup` (`-s`): Guides you through the initial configuration process, including setting up Google API credentials and LLM API keys.
-    *   `--list` (`-l`): Displays all your currently tracked Google Task lists and the tasks within them, enriched with AI-generated categories and difficulty.
-    *   `--add` (`-a`): Allows you to easily add new Google Task lists to be tracked by the application.
-*   **Interactive Activity Heatmap**: Generates a visually engaging HTML heatmap (similar to GitHub contribution graphs) that represents your daily activity. Each day is colored based on the dominant task category and intensity, providing a quick overview of your productivity trends.
-*   **Persistent Data Storage**: All categorized task data is securely stored in Google Firebase Firestore, allowing for historical tracking, analysis, and future enhancements.
+    *   `--setup` (`-s`): Guides you through the initial configuration process.
+    *   `--list` (`-l`): Displays all your tracked Google Task lists and tasks.
+    *   `--add` (`-a`): Adds new Google Task lists to be tracked.
+*   **Persistent Data Storage**: All categorized task data is securely stored in Google Firebase Firestore.
 
 ## 🛠️ Tech Stack
 
+*   **Mobile App**: Flutter, Dart
 *   **Backend**: Python
 *   **Task Management**: Google Tasks API
 *   **Artificial Intelligence**: Google Generative AI (Gemini), OpenAI API (optional)
 *   **Database**: Google Firebase Firestore
 *   **Authentication**: Google OAuth2
-*   **Frontend (Visualization)**: HTML, CSS, JavaScript (for the standalone heatmap)
 
 ## 🚀 Getting Started
 
 ### Prerequisites
-
-Before you begin, ensure you have the following installed:
 
 *   Python 3.x
 *   Git
 *   A Google Cloud Platform (GCP) account
 *   A Firebase project
 *   An API key for Google Gemini (or OpenAI, if preferred)
+*   Flutter SDK (for mobile app development)
 
-### Installation
+### Installation & Setup
+
+#### Backend (CLI Tool)
 
 1.  **Clone the repository**:
     ```bash
@@ -55,7 +68,32 @@ Before you begin, ensure you have the following installed:
     pip install -r requirements.txt
     ```
 
-#### 🛠️ Project Setup Guide
+3.  **Project Setup (Google & Firebase)**:
+    Follow the detailed setup guide below for setting up Google Tasks API and Firebase.
+
+#### Mobile App (Flutter)
+
+1.  **Navigate to the app directory**:
+    ```bash
+    cd app
+    ```
+
+2.  **Install Flutter dependencies**:
+    ```bash
+    flutter pub get
+    ```
+
+3.  **Configure Firebase for the app**:
+    *   Follow the FlutterFire documentation to add Firebase to your Flutter app. You will need to place `google-services.json` in `app/android/app/` for Android and `GoogleService-Info.plist` in `app/ios/Runner/` for iOS.
+
+4.  **Run the app**:
+    ```bash
+    flutter run
+    ```
+
+---
+
+#### 🛠️ Project Setup Guide (Backend)
 
 This section outlines the steps required to configure the Google Tasks API and Firebase Storage for this project. Please follow each part carefully to ensure the system functions correctly.
 #### 📌 Prerequisites
@@ -101,7 +139,7 @@ Navigate to: https://console.cloud.google.com
         Click Download JSON to get your `credentials.json` file
 
 - Save the File
-    - Place the downloaded `credentials.json` in the `config ` directory of the project 
+    - Place the downloaded `credentials.json` in the `config ` directory of the project
 
 #### 🔥 Setting up Firebase Storage
 
@@ -127,7 +165,7 @@ To use Firebase for file storage, follow these steps:
 
 #### **LLM API Key Setup**:
 
-*   Add your Gemini API key (or OpenAI API key) when prompted while running the app 
+*   Add your Gemini API key (or OpenAI API key) when prompted while running the app
 
 #### **Initial Application Setup**:
 Run the setup command to initialize the application and authenticate with Google Tasks:
@@ -153,19 +191,16 @@ Run the setup command to initialize the application and authenticate with Google
     ```
     You will be prompted to enter the name of the task list.
 
-### Activity Heatmap (WIP)
-
-The `index.html` file provides a visual heatmap of your categorized activities. This file is currently a standalone visualization. To view your heatmap:
-
-1.  After running the `main.py` script (which processes and saves data to Firebase), you would typically export the processed data into a format consumable by `index.html`.
-2.  Open `index.html` directly in your web browser.
-
-*Note: The `index.html` currently contains hardcoded sample data. For real-time visualization, you would need to implement a mechanism to dynamically populate the `DATA` variable in `index.html` with the data from Firebase Firestore.*
 
 ## 📂 Project Structure
 
 ```
 .
+├── app/                    # Flutter mobile application
+│   ├── lib/                  # Main application source code
+│   ├── android/              # Android specific files
+│   ├── ios/                  # iOS specific files
+│   └── pubspec.yaml          # Flutter dependencies
 ├── config/                 # Configuration files, constants, API credentials
 │   ├── constants.py        # Defines constants like API labels, categories, file paths
 │   ├── credentials.json    # Google Tasks API credentials (user-provided)
@@ -182,13 +217,11 @@ The `index.html` file provides a visual heatmap of your categorized activities. 
 ├── tasks/                  # Logic for Google Tasks interaction and task processing
 │   ├── getTasks.py         # Handles Google Tasks API calls, authentication, and task enrichment
 │   └── ...
-├── views/                  # User interface components
+├── views/                  # CLI view components
 │   ├── setup_view.py       # CLI views for setup process
 │   ├── tasks_view.py       # CLI views for displaying tasks
-│   └── index.html          # Standalone HTML for activity heatmap visualization
 ├── main.py                 # Main application entry point and CLI argument parser
 ├── utils.py                # Utility functions, including Firebase Firestore integration
-├── .env                    # Environment variables (e.g., LLM API keys)
 ├── .gitignore              # Specifies intentionally untracked files to ignore
 ├── README.md               # This comprehensive guide
 └── ...
@@ -250,5 +283,5 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 
 ## TO-DO
-- [ ] Finalize on whether a android widget or html would be better
+- [x] Finalize on whether a android widget or html would be better
 - [ ] Build the OpenAI and ollama provider

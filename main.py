@@ -20,7 +20,6 @@ import json
 if __name__ == '__main__':
     firebase_obj=Firebase()
     tracker_data = firebase_obj.get()
-    print(tracker_data)
     if tracker_data:
         with open(LIST_TRACKER, 'w') as f:
             json.dump(tracker_data, f)
