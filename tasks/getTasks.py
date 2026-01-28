@@ -96,6 +96,7 @@ class TrackerProvider:
                 flag=False
                 tasks = service.tasks().list(tasklist=tasklist['id'],showHidden=True).execute()
                 task_items = tasks.get('items', [])
+                print(task_items)
                 tasks_info[tasklist['title'].strip()]=self.parallel_process_tasks(task_items,provider,model)
 
         if flag: 
