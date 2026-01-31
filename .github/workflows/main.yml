@@ -2,8 +2,8 @@ name: Daily Task Categorization
 
 on:
   schedule:
-    - cron: '0 18 * * *' # Runs every day at midnight
-  workflow_dispatch: # Allows manual triggering
+    - cron: '0 18 * * *'
+  workflow_dispatch:
 
 jobs:
   categorize-tasks:
@@ -13,12 +13,22 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.x'
+          python-version: '3.10'
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt --prefer-binary
 
       - name: Create config directory
         run: mkdir -p config
@@ -28,7 +38,7 @@ jobs:
 
       - name: Decode Firebase Credentials
         run: echo "${{ secrets.FIREBASE_JSON }}" | base64 --decode > config/firebase.json
-        
+
       - name: Decode Google Token
         run: echo "${{ secrets.TOKEN_PICKLE }}" | base64 --decode > config/token.pickle
 
@@ -37,6 +47,6 @@ jobs:
           echo "export MODEL=GEMINI_MODEL" >> ~/.habit
           echo "export GEMINI_API_KEY='${{ secrets.GEMINI_API_KEY }}'" >> ~/.habit
           echo "export GEMINI_MODEL='gemini-2.0-flash'" >> ~/.habit
-          
+
       - name: Run task categorization
         run: python main.py
