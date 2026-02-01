@@ -59,7 +59,7 @@ if __name__ == '__main__':
         TaskView.display_task_lists(tasks_obj.read_local_list())
     if not args.list:
         titles=tasks_obj.read_local_list()
-        print('titles')
+        print(titles)
         response=tasks_obj.list_google_tasks(titles,provider,model)
         save_utils.save(response,firebase_obj)
         for t in response.keys():
