@@ -11,6 +11,8 @@ from config.setup import Setup
 from config.constants import CONFIG_FILE,LIST_TRACKER,SCOPES
 from llm import GetProvider
 import tasks 
+
+from tasks.getAtmomicHabtis import main
 from tasks.getTasks import TrackerProvider
 from views.tasks_view import TaskView
 from views.setup_view import SetupView
@@ -59,8 +61,10 @@ if __name__ == '__main__':
         TaskView.display_task_lists(tasks_obj.read_local_list())
     if not args.list:
         titles=tasks_obj.read_local_list()
-        print(titles)
+        # print(titles)
         response=tasks_obj.list_google_tasks(titles,provider,model)
+        print(main(response))
+
         save_utils.save(response,firebase_obj)
         for t in response.keys():
             TaskView.display_tasks(response[t])
