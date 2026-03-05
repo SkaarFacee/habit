@@ -5,7 +5,7 @@ import csv
 from datetime import datetime
 from typing import Dict, Any, Optional, Tuple, List
 from sentence_transformers import SentenceTransformer
-from config.constants import GROQ_API_LABEL
+
 
 
 import numpy as np
