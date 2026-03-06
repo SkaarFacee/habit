@@ -31,7 +31,7 @@ def save_json(path: str, data: Any) -> None:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
 
-def load_habits_list(path: str) -> Dict[Any]:
+def load_habits_list(path: str):
     data = load_json(path, default=[])
     return data
 
