@@ -8,7 +8,7 @@ import ast
 
 
 from config.setup import Setup
-from config.constants import CONFIG_FILE,LIST_TRACKER,SCOPES
+from config.constants import CONFIG_FILE,LIST_TRACKER,SCOPES,ATOMIC_HABITS
 from llm import GetProvider
 import tasks 
 
@@ -22,9 +22,13 @@ import json
 if __name__ == '__main__':
     firebase_obj=Firebase()
     tracker_data = firebase_obj.get()
+    atomic_habits_data=firebase_obj.get_atomic()
     if tracker_data:
         with open(LIST_TRACKER, 'w') as f:
             json.dump(tracker_data, f)
+    if atomic_habits_data:
+        with open(ATOMIC_HABITS, 'w') as f:
+            json.dump(atomic_habits_data, f)
     tasks_obj=TrackerProvider()
     setup_obj=Setup()
     env=dotenv_values(Path.home()/CONFIG_FILE)
@@ -63,8 +67,8 @@ if __name__ == '__main__':
         titles=tasks_obj.read_local_list()
         # print(titles)
         response=tasks_obj.list_google_tasks(titles,provider,model)
-        print(main(response))
-
-        save_utils.save(response,firebase_obj)
+        response,habits_tracker=main(response)
+        save_utils.save(response,firebase_obj)  
+        save_utils.save_atomic(firebase_obj,habits_tracker)
         for t in response.keys():
             TaskView.display_tasks(response[t])

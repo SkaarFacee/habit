@@ -1,4 +1,4 @@
-from config.constants import LIST_TRACKER,FIREBASE_CRED
+from config.constants import LIST_TRACKER,FIREBASE_CRED,ATOMIC_HABITS
 
 import json
 from datetime import datetime
@@ -13,7 +13,6 @@ class SaveUtils:
         self.data=json.load(open(LIST_TRACKER,'r'))
         if 'Tracker' not in self.data.keys():
             self.data['Tracker']={}
-
     @staticmethod
     def process_list_name(args):
         list_name, items = args
@@ -100,31 +99,13 @@ class SaveUtils:
                             date_data.append(task)
 
 
-
-    # BETA VERSION 
-    # def create_json(self,tracker_entries):
-    #     for entry in tracker_entries:
-    #         for list_name in entry.keys():
-    #             if list_name not in self.data['Tracker'].keys():
-    #                 self.data['Tracker'].update(entry)
-    #                 continue 
-    #             else: 
-    #                 for date_key in entry[list_name].keys():
-    #                     if not date_key in self.data['Tracker'][list_name].keys():
-    #                         self.data['Tracker'][list_name][date_key]=entry[list_name][date_key]
-    #                         continue
-    #                     else:
-    #                         for task_info in entry[list_name][date_key]:
-    #                             if task_info not in self.data['Tracker'][list_name][date_key]:
-    #                                 self.data['Tracker'][list_name][date_key].append(task_info)
-
-
-
-
     def save_json(self,firebase_obj):
         json.dump(self.data,open(LIST_TRACKER,'w'))
         firebase_obj.push(self.data)
 
+    def save_atomic(self,firebase_obj,atomic_habits):
+        json.dump(atomic_habits,open(ATOMIC_HABITS,'w'))
+        firebase_obj.push_atomic(atomic_habits)
 
 class Firebase():
     def __init__(self):
@@ -133,11 +114,24 @@ class Firebase():
         self.db = firestore.client()
 
     def push(self,json):
-        doc_ref = self.db.collection("habit").document("tracker")
+        doc_ref = self.db.collection("habit").document("test_tracker")
         doc_ref.set(json)
     
+    def push_atomic(self, habits):
+        doc_ref = self.db.collection("habit").document("atomic_habits")
+        doc_ref.set({"habits": habits})
+
+
     def get(self):
         doc_ref = self.db.collection("habit").document("tracker")
+        doc = doc_ref.get()
+        if doc.exists:
+            return doc.to_dict()
+        else:
+            return None
+        
+    def get_atomic(self):
+        doc_ref = self.db.collection("habit").document("atomic_habits")
         doc = doc_ref.get()
         if doc.exists:
             return doc.to_dict()

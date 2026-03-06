@@ -1,25 +1,14 @@
 import os
 import re
 import json
-import csv
 from datetime import datetime
-from typing import Dict, Any, Optional, Tuple, List
-from sentence_transformers import SentenceTransformer
+from typing import Dict, Any, Tuple, List, Optional
 
-
-
-import numpy as np
 from groq import Groq
+from config.constants import ATOMIC_HABITS
 
 DEFAULT_MODEL = "openai/gpt-oss-120b"
-
-
-EMBED_MODEL = "all-MiniLM-L6-v2"
-embedding_model = SentenceTransformer(EMBED_MODEL)
-ATOMIC_HABITS_FILE = "atomic_habits.json"
-ATOMIC_HABIT_EMBEDDINGS_FILE = "atomic_habit_embeddings.json"  # key -> embedding vector
-
-
+ATOMIC_HABITS_FILE = ATOMIC_HABITS
 
 
 # ----------------- Helpers -----------------
@@ -41,90 +30,59 @@ def save_json(path: str, data: Any) -> None:
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
-def cosine_similarity(a, b) -> float:
-    a = np.asarray(a, dtype=np.float32)
-    b = np.asarray(b, dtype=np.float32)
-    return float(np.dot(a, b))
 
-# ----------------- Embeddings -----------------
-def embed_text(text: str):
-    if not text:
-        return None
-    vec= embedding_model.encode(text, normalize_embeddings=True)
-    return vec.tolist()
-
-def ensure_habit_embedding(habit_key: str, habit_name: str, embeddings_store: Dict[str, Any]) -> None:
-    if habit_key in embeddings_store:
-        # also repair legacy ndarray values if present
-        v = embeddings_store[habit_key]
-        if hasattr(v, "tolist"):
-            embeddings_store[habit_key] = v.tolist()
-        return
-
-    emb = embed_text(habit_name)
-    if emb is not None:
-        embeddings_store[habit_key] = emb
+def load_habits_list(path: str) -> List[str]:
+    data = load_json(path, default=[])
+    if isinstance(data, list):
+        return [str(x).strip() for x in data if str(x).strip()]
+    return []
 
 
-def build_embedding_index(
-    embeddings_store: Dict[str, Any],
-) -> Tuple[List[str], np.ndarray]:
-    """
-    Returns (habit_keys, matrix[n,d]) for fast cosine similarity search.
-    """
-    keys = []
-    vecs = []
-    for k, v in embeddings_store.items():
-        if isinstance(v, list) and len(v) > 0:
-            keys.append(k)
-            vecs.append(v)
-    if not vecs:
-        return [], np.zeros((0, 0), dtype=np.float32)
-    mat = np.array(vecs, dtype=np.float32)
-    return keys, mat
+def save_habits_list(path: str, habits: List[str]) -> None:
+    deduped = []
+    seen = set()
+    for habit in habits:
+        clean = str(habit).strip()
+        key = normalize_key(clean)
+        if clean and key not in seen:
+            deduped.append(clean)
+            seen.add(key)
+    save_json(path, deduped)
 
 
-def match_existing_habit_by_embedding(title, habits_store, embeddings_store, threshold=0.75):
-
-    title_vec = embed_text(title)
-
-    best_key = None
-    best_score = -1
-
-    for habit_key, habit_obj in habits_store.items():
-
-        if habit_key not in embeddings_store:
-            embeddings_store[habit_key] = embed_text(habit_obj["atomic_habit"])
-
-        score = cosine_similarity(title_vec, embeddings_store[habit_key])
-
-        if score > best_score:
-            best_score = score
-            best_key = habit_key
-
-    if best_score >= threshold:
-        return best_key, habits_store[best_key], best_score
-
-    return None
-
-# ----------------- LLM: title -> atomic habit ONLY -----------------
-def llm_parse_atomic_habit_only(client: Groq, model: str, title: str) -> Dict[str, str]:
+# ----------------- LLM -----------------
+def llm_match_or_create_habit(
+    client: Groq,
+    model: str,
+    title: str,
+    habits: List[str],
+) -> Dict[str, str]:
     """
     Returns STRICT JSON:
-    { "atomic_habit": "Verb + object, single action, <= 6 words" }
+    {
+      "matched": true/false,
+      "atomic_habit": "..."
+    }
     """
     system = (
-        "You convert task titles into a single atomic habit.\n"
+        "You assign a task title to the best matching atomic habit from a provided list.\n"
         "Rules:\n"
-        "- atomic_habit: one concrete action, starts with a verb, <= 6 words.\n"
-        "- Make it reusable; remove places/times.\n"
+        "- If one existing habit clearly fits, return it exactly as written.\n"
+        "- If none fit, create a new atomic habit.\n"
+        "- A new atomic habit must be concrete, reusable, start with a verb, and be <= 6 words.\n"
+        "- Remove dates, places, and one-off details.\n"
         "Return STRICT JSON only."
     )
 
+    habits_text = json.dumps(habits, ensure_ascii=False)
+
     user = (
         f"Task title: {title}\n\n"
-        'Output schema:\n'
-        '{ "atomic_habit": "..." }'
+        f"Existing habits:\n{habits_text}\n\n"
+        "Output schema:\n"
+        '{ "matched": true, "atomic_habit": "one of the existing habits exactly" }\n'
+        "or\n"
+        '{ "matched": false, "atomic_habit": "new habit" }'
     )
 
     resp = client.chat.completions.create(
@@ -138,25 +96,34 @@ def llm_parse_atomic_habit_only(client: Groq, model: str, title: str) -> Dict[st
     )
 
     data = json.loads(resp.choices[0].message.content)
+    matched = bool(data.get("matched", False))
     atomic_habit = str(data.get("atomic_habit", "")).strip()
+
     if not atomic_habit:
-        atomic_habit = title[:60]
-    return {"atomic_habit": atomic_habit}
+        atomic_habit = title[:60].strip()
+
+    return {
+        "matched": matched,
+        "atomic_habit": atomic_habit,
+    }
+
+
+def find_existing_habit_case_insensitive(habits: List[str], candidate: str) -> Optional[str]:
+    candidate_key = normalize_key(candidate)
+    for habit in habits:
+        if normalize_key(habit) == candidate_key:
+            return habit
+    return None
 
 
 # ----------------- Pipeline -----------------
-def update_tracker(payload: Dict[str, Any], model: str = DEFAULT_MODEL) -> Dict[str, Any]:
+def update_tracker(payload: Dict[str, Any], model: str = DEFAULT_MODEL) -> Tuple[Any, List[str]]:
     api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
         raise RuntimeError("Missing GROQ_API_KEY environment variable")
 
     client = Groq(api_key=api_key)
-
-    habits_store: Dict[str, Any] = load_json(ATOMIC_HABITS_FILE, default={})
-    embeddings_store: Dict[str, Any] = load_json(ATOMIC_HABIT_EMBEDDINGS_FILE, default={})
-
-
-    today = datetime.now().strftime("%Y-%m-%d")
+    habits_list = load_habits_list(ATOMIC_HABITS_FILE)
 
     for goal_list_name, tasks in payload.items():
         if not isinstance(tasks, list):
@@ -167,58 +134,32 @@ def update_tracker(payload: Dict[str, Any], model: str = DEFAULT_MODEL) -> Dict[
             if not title:
                 continue
 
-            status = str(t.get("status", "")).strip()
-            completed_on = str(t.get("completed", "")).strip()
-
-            # If already present, keep it (optional behavior)
             existing_atomic = str(t.get("atomic_habit", "")).strip()
             if existing_atomic:
                 chosen_habit = existing_atomic
-                habit_key = normalize_key(chosen_habit)
-                match_sim = ""
             else:
-                # 1) embedding match against existing habits
-                matched = match_existing_habit_by_embedding(
-                    title,
-                    habits_store,
-                    embeddings_store,
-                    threshold=0.86,  # tune this: 0.82-0.90 typical
+                result = llm_match_or_create_habit(
+                    client=client,
+                    model=model,
+                    title=title,
+                    habits=habits_list,
                 )
 
-                if matched:
-                    habit_key, habit_obj, sim = matched
-                    chosen_habit = str(habit_obj.get("atomic_habit", title)).strip() or title
-                    match_sim = f"{sim:.3f}"
+                suggested_habit = result["atomic_habit"]
+                matched_habit = find_existing_habit_case_insensitive(habits_list, suggested_habit)
+
+                if matched_habit:
+                    chosen_habit = matched_habit
                 else:
-                    # 2) no match -> create new habit via LLM
-                    parsed = llm_parse_atomic_habit_only(client, model=model, title=title)
-                    chosen_habit = parsed["atomic_habit"]
-                    habit_key = normalize_key(chosen_habit)
-                    match_sim = ""
+                    chosen_habit = suggested_habit
+                    habits_list.append(chosen_habit)
 
-                    if habit_key not in habits_store:
-                        habits_store[habit_key] = {
-                            "atomic_habit": chosen_habit,
-                            "created_at": datetime.utcnow().isoformat(timespec="seconds") + "Z",
-                        }
-
-                    # store embedding for the new habit
-                    ensure_habit_embedding(habit_key, chosen_habit, embeddings_store)
-
-            # ✅ write back into the task
             t["atomic_habit"] = chosen_habit
 
+    # save_habits_list(ATOMIC_HABITS_FILE, habits_list)
+    return payload, habits_list
 
-    save_json(ATOMIC_HABITS_FILE, habits_store)
-
-    for k, v in list(embeddings_store.items()):
-        if hasattr(v, "tolist"):        # numpy array or similar
-            embeddings_store[k] = v.tolist()
-    save_json(ATOMIC_HABIT_EMBEDDINGS_FILE, embeddings_store)
-
-    return payload
 
 def main(payload):
     enriched = update_tracker(payload)
     return enriched
-    # print(json.dumps(enriched, indent=2, ensure_ascii=False))

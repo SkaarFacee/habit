@@ -15,12 +15,13 @@ DEFAULT_CATEGORIES=['Work','Play','Health']
 GEMINI_API_LABEL='GEMINI_API_KEY'
 GEMINI_MODEL_LABEL='GEMINI_MODEL'
 
-
 OPENAI_API_LABEL='OPEN_API_KEY'
 OPENAI_MODEL_LABEL='OPENAI_MODEL'
 
 SCOPES = ['https://www.googleapis.com/auth/tasks.readonly']
 LIST_TRACKER='config/tracker.json'
+
+ATOMIC_HABITS='config/atomic_habits.json'
 
 GOOGLE_CRED='config/credentials.json'
 LOCAL_CRED='config/token.pickle'
