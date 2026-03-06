@@ -31,11 +31,9 @@ def save_json(path: str, data: Any) -> None:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
 
-def load_habits_list(path: str) -> List[str]:
+def load_habits_list(path: str) -> Dict[Any]:
     data = load_json(path, default=[])
-    if isinstance(data, list):
-        return [str(x).strip() for x in data if str(x).strip()]
-    return []
+    return data
 
 
 def save_habits_list(path: str, habits: List[str]) -> None:
@@ -123,7 +121,8 @@ def update_tracker(payload: Dict[str, Any], model: str = DEFAULT_MODEL) -> Tuple
         raise RuntimeError("Missing GROQ_API_KEY environment variable")
 
     client = Groq(api_key=api_key)
-    habits_list = load_habits_list(ATOMIC_HABITS_FILE)
+    habits_json = load_habits_list(ATOMIC_HABITS_FILE)
+    habits_list=habits_json['habits']
 
     for goal_list_name, tasks in payload.items():
         if not isinstance(tasks, list):
@@ -156,7 +155,7 @@ def update_tracker(payload: Dict[str, Any], model: str = DEFAULT_MODEL) -> Tuple
 
             t["atomic_habit"] = chosen_habit
 
-    # save_habits_list(ATOMIC_HABITS_FILE, habits_list)
+    save_habits_list(ATOMIC_HABITS_FILE, habits_list)
     return payload, habits_list
 
 
