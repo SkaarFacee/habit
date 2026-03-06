@@ -114,7 +114,7 @@ class Firebase():
         self.db = firestore.client()
 
     def push(self,json):
-        doc_ref = self.db.collection("habit").document("test_tracker")
+        doc_ref = self.db.collection("habit").document("tracker")
         doc_ref.set(json)
     
     def push_atomic(self, habits):
