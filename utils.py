@@ -104,8 +104,12 @@ class SaveUtils:
         firebase_obj.push(self.data)
 
     def save_atomic(self,firebase_obj,atomic_habits):
-        json.dump(atomic_habits,open(ATOMIC_HABITS,'w'))
-        firebase_obj.push_atomic(atomic_habits)
+        with open(ATOMIC_HABITS, 'r') as f:
+            data = json.load(f)
+        print(atomic_habits)
+        payload={'favorites':data['favorites'],"habits":atomic_habits}
+        json.dump(payload,open(ATOMIC_HABITS,'w'))
+        firebase_obj.push_atomic(payload)
 
 class Firebase():
     def __init__(self):
@@ -119,7 +123,7 @@ class Firebase():
     
     def push_atomic(self, habits):
         doc_ref = self.db.collection("habit").document("atomic_habits")
-        doc_ref.set({"habits": habits})
+        doc_ref.set(habits)
 
 
     def get(self):

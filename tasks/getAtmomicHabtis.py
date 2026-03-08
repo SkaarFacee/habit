@@ -10,7 +10,6 @@ from config.constants import ATOMIC_HABITS
 DEFAULT_MODEL = "openai/gpt-oss-120b"
 ATOMIC_HABITS_FILE = ATOMIC_HABITS
 
-
 # ----------------- Helpers -----------------
 def normalize_key(text: str) -> str:
     text = text.strip().lower()
@@ -33,8 +32,8 @@ def save_json(path: str, data: Any) -> None:
 
 def load_habits_list(path: str) -> List[str]:
     data = load_json(path, default=[])
-    if isinstance(data, list):
-        return [str(x).strip() for x in data if str(x).strip()]
+    if isinstance(data, dict):
+        return [str(x).strip() for x in data['habits'] if str(x).strip()]
     return []
 
 
@@ -186,10 +185,12 @@ def update_tracker(payload: Dict[str, Any], model: str = DEFAULT_MODEL) -> Tuple
 
                 t["atomic_habit"] = chosen_habit
 
-    save_habits_list(ATOMIC_HABITS_FILE, habits_list)
+    # save_habits_list(ATOMIC_HABITS_FILE, habits_list)
     return new_payload, list(habits_list)
 
 
 def main(payload):
     updated_payload, updated_habits = update_tracker(payload)
+    print("This is the output of the update habits ")
+    print(updated_habits)
     return updated_payload, updated_habits
