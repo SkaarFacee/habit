@@ -1,7 +1,7 @@
 import os
 import re
 import json
-from datetime import datetime
+import copy
 from typing import Dict, Any, Tuple, List, Optional
 
 from groq import Groq
@@ -31,9 +31,11 @@ def save_json(path: str, data: Any) -> None:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
 
-def load_habits_list(path: str):
+def load_habits_list(path: str) -> List[str]:
     data = load_json(path, default=[])
-    return data
+    if isinstance(data, list):
+        return [str(x).strip() for x in data if str(x).strip()]
+    return []
 
 
 def save_habits_list(path: str, habits: List[str]) -> None:
@@ -47,6 +49,12 @@ def save_habits_list(path: str, habits: List[str]) -> None:
             seen.add(key)
     save_json(path, deduped)
 
+def find_existing_habit_case_insensitive(habits: List[str], candidate: str) -> Optional[str]:
+    candidate_key = normalize_key(candidate)
+    for habit in habits:
+        if normalize_key(habit) == candidate_key:
+            return habit
+   
 
 # ----------------- LLM -----------------
 def llm_match_or_create_habit(
@@ -106,59 +114,82 @@ def llm_match_or_create_habit(
     }
 
 
-def find_existing_habit_case_insensitive(habits: List[str], candidate: str) -> Optional[str]:
-    candidate_key = normalize_key(candidate)
-    for habit in habits:
-        if normalize_key(habit) == candidate_key:
-            return habit
-    return None
-
-
 # ----------------- Pipeline -----------------
-def update_tracker(payload: Dict[str, Any], model: str = DEFAULT_MODEL) -> Tuple[Any, List[str]]:
+def update_tracker(payload: Dict[str, Any], model: str = DEFAULT_MODEL) -> Tuple[Dict[str, Any], List[str]]:
     api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
         raise RuntimeError("Missing GROQ_API_KEY environment variable")
 
     client = Groq(api_key=api_key)
-    habits_json = load_habits_list(ATOMIC_HABITS_FILE)
-    habits_list=habits_json['habits']
 
-    for goal_list_name, tasks in payload.items():
-        if not isinstance(tasks, list):
+    # Work on a copy so we return a newly modified payload JSON
+    new_payload = copy.deepcopy(payload)
+
+    # Load habits and make sure we return a brand-new list object
+    habits_list = list(load_habits_list(ATOMIC_HABITS_FILE))
+
+    tracker = new_payload.get("Tracker", {})
+    list_names = new_payload.get("lists", [])
+
+    if not isinstance(tracker, dict):
+        raise ValueError("payload['Tracker'] must be a dictionary")
+
+    if not isinstance(list_names, list):
+        raise ValueError("payload['lists'] must be a list")
+
+    # IMPORTANT:
+    # list names are case-sensitive, so use them exactly as they appear
+    # in payload["lists"] without normalizing/changing case.
+    for list_name in list_names:
+        if not isinstance(list_name, str):
             continue
 
-        for t in tasks:
-            title = str(t.get("title", "")).strip()
-            if not title:
+        dated_tasks = tracker.get(list_name)
+        if not isinstance(dated_tasks, dict):
+            continue
+
+        for date_key, tasks in dated_tasks.items():
+            if not isinstance(tasks, list):
                 continue
 
-            existing_atomic = str(t.get("atomic_habit", "")).strip()
-            if existing_atomic:
-                chosen_habit = existing_atomic
-            else:
-                result = llm_match_or_create_habit(
-                    client=client,
-                    model=model,
-                    title=title,
-                    habits=habits_list,
-                )
+            for t in tasks:
+                if not isinstance(t, dict):
+                    continue
 
-                suggested_habit = result["atomic_habit"]
-                matched_habit = find_existing_habit_case_insensitive(habits_list, suggested_habit)
+                title = str(t.get("title", "")).strip()
+                if not title:
+                    continue
 
-                if matched_habit:
-                    chosen_habit = matched_habit
+                existing_atomic = str(t.get("atomic_habit", "")).strip()
+                if existing_atomic:
+                    matched_habit = find_existing_habit_case_insensitive(habits_list, existing_atomic)
+                    chosen_habit = matched_habit if matched_habit else existing_atomic
+
+                    if not matched_habit:
+                        habits_list.append(chosen_habit)
                 else:
-                    chosen_habit = suggested_habit
-                    habits_list.append(chosen_habit)
+                    result = llm_match_or_create_habit(
+                        client=client,
+                        model=model,
+                        title=title,
+                        habits=habits_list,
+                    )
 
-            t["atomic_habit"] = chosen_habit
+                    suggested_habit = result["atomic_habit"]
+                    matched_habit = find_existing_habit_case_insensitive(habits_list, suggested_habit)
+
+                    if matched_habit:
+                        chosen_habit = matched_habit
+                    else:
+                        chosen_habit = suggested_habit
+                        habits_list.append(chosen_habit)
+
+                t["atomic_habit"] = chosen_habit
 
     save_habits_list(ATOMIC_HABITS_FILE, habits_list)
-    return payload, habits_list
+    return new_payload, list(habits_list)
 
 
 def main(payload):
-    enriched = update_tracker(payload)
-    return enriched
+    updated_payload, updated_habits = update_tracker(payload)
+    return updated_payload, updated_habits

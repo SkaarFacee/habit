@@ -1,9 +1,9 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
-import 'habit_details_screen.dart';
 import 'shared/neon_ribbon_background.dart';
 import 'shared/theme.dart';
 
@@ -28,7 +28,7 @@ class _AtomicHabitsScreenState extends State<AtomicHabitsScreen> {
 
   Map<String, dynamic> _rawTrackerData = {};
   Map<String, Map<DateTime, int>> _habitDateMap = {};
-  Map<String, List<HabitTaskEntry>> _habitTaskMap = {};
+  Map<String, List<_HabitTaskEntry>> _habitTaskMap = {};
 
   List<String> _allHabits = [];
   List<String> _favorites = [];
@@ -40,7 +40,7 @@ class _AtomicHabitsScreenState extends State<AtomicHabitsScreen> {
   final TextEditingController _searchController = TextEditingController();
 
   String _searchQuery = '';
-  int _visibleCount = 5;
+  int _visibleCount = 10;
   bool _loading = true;
   bool _saving = false;
 
@@ -88,7 +88,7 @@ class _AtomicHabitsScreenState extends State<AtomicHabitsScreen> {
 
       setState(() {
         _searchQuery = nextQuery;
-        _visibleCount = 5;
+        _visibleCount = 10;
         _recomputeHabitLists();
       });
     });
@@ -206,7 +206,10 @@ class _AtomicHabitsScreenState extends State<AtomicHabitsScreen> {
 
         final existing = flattened[dateStr];
         if (existing is List) {
-          flattened[dateStr] = [...existing, ...activities];
+          flattened[dateStr] = [
+            ...existing,
+            ...activities,
+          ];
         } else {
           flattened[dateStr] = List<dynamic>.from(activities);
         }
@@ -216,10 +219,10 @@ class _AtomicHabitsScreenState extends State<AtomicHabitsScreen> {
     return flattened;
   }
 
-  Map<String, List<HabitTaskEntry>> _parseHabitTaskMap(
+  Map<String, List<_HabitTaskEntry>> _parseHabitTaskMap(
     Map<String, dynamic> data,
   ) {
-    final result = <String, List<HabitTaskEntry>>{};
+    final result = <String, List<_HabitTaskEntry>>{};
 
     data.forEach((dateStr, activities) {
       if (activities is! List) return;
@@ -250,7 +253,7 @@ class _AtomicHabitsScreenState extends State<AtomicHabitsScreen> {
 
         result.putIfAbsent(habit, () => []);
         result[habit]!.add(
-          HabitTaskEntry(
+          _HabitTaskEntry(
             date: date,
             title: title,
             category: category,
@@ -273,7 +276,7 @@ class _AtomicHabitsScreenState extends State<AtomicHabitsScreen> {
   }
 
   Map<String, Map<DateTime, int>> _buildHabitDateMap(
-    Map<String, List<HabitTaskEntry>> taskMap,
+    Map<String, List<_HabitTaskEntry>> taskMap,
   ) {
     final result = <String, Map<DateTime, int>>{};
 
@@ -640,13 +643,13 @@ class _AtomicHabitsScreenState extends State<AtomicHabitsScreen> {
   }
 
   void _openHabitDetails(String habit) {
-    final entries = List<HabitTaskEntry>.from(_habitTaskMap[habit] ?? const []);
+    final entries = List<_HabitTaskEntry>.from(_habitTaskMap[habit] ?? const []);
     final dates = Map<DateTime, int>.from(_habitDateMap[habit] ?? const {});
     final isFavorite = _containsHabit(_favorites, habit);
 
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => HabitDetailsScreen(
+        builder: (_) => _HabitDetailsPage(
           habit: habit,
           entries: entries,
           dates: dates,
@@ -683,7 +686,9 @@ class _AtomicHabitsScreenState extends State<AtomicHabitsScreen> {
       ),
       body: Stack(
         children: [
-          const RepaintBoundary(child: NeonRibbonBackground()),
+          const RepaintBoundary(
+            child: NeonRibbonBackground(),
+          ),
           SafeArea(
             child: _loading ? _buildLoading(isDark) : _buildContent(isDark),
           ),
@@ -751,17 +756,17 @@ class _AtomicHabitsScreenState extends State<AtomicHabitsScreen> {
             spacing: 8,
             runSpacing: 8,
             children: [
-              InfoChip(
+              _InfoChip(
                 icon: Icons.auto_awesome_rounded,
                 label: '${habits.length} habits',
                 isDark: isDark,
               ),
-              InfoChip(
+              _InfoChip(
                 icon: Icons.star_rounded,
                 label: '${_favorites.length} favorites',
                 isDark: isDark,
               ),
-              InfoChip(
+              _InfoChip(
                 icon: Icons.visibility_rounded,
                 label: 'Showing ${visibleHabits.length}',
                 isDark: isDark,
@@ -775,6 +780,7 @@ class _AtomicHabitsScreenState extends State<AtomicHabitsScreen> {
               : ListView.builder(
                   padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
                   physics: const BouncingScrollPhysics(),
+                  cacheExtent: 900,
                   itemCount:
                       visibleHabits.length + (habits.length > _visibleCount ? 1 : 0),
                   itemBuilder: (context, index) {
@@ -785,7 +791,7 @@ class _AtomicHabitsScreenState extends State<AtomicHabitsScreen> {
                           child: FilledButton.icon(
                             onPressed: () {
                               setState(() {
-                                _visibleCount += 5;
+                                _visibleCount += 10;
                                 _recomputeHabitLists();
                               });
                             },
@@ -799,13 +805,14 @@ class _AtomicHabitsScreenState extends State<AtomicHabitsScreen> {
                     final habit = visibleHabits[index];
                     final dates = _habitDateMap[habit] ?? const <DateTime, int>{};
                     final isFavorite = _containsHabit(_favorites, habit);
-                    final entries = _habitTaskMap[habit] ?? const <HabitTaskEntry>[];
+                    final entries =
+                        _habitTaskMap[habit] ?? const <_HabitTaskEntry>[];
 
                     return Padding(
                       padding: EdgeInsets.only(
-                        bottom: index == visibleHabits.length - 1 ? 0 : 12,
+                        bottom: index == visibleHabits.length - 1 ? 0 : 14,
                       ),
-                      child: _CompactHabitCard(
+                      child: _HabitCard(
                         key: ValueKey(habit),
                         habit: habit,
                         dates: dates,
@@ -868,15 +875,15 @@ class _AtomicHabitsScreenState extends State<AtomicHabitsScreen> {
 
     return ListView.builder(
       padding: const EdgeInsets.all(16),
-      itemCount: 6,
+      itemCount: 5,
       itemBuilder: (_, __) {
         return Padding(
-          padding: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.only(bottom: 14),
           child: Container(
-            height: 132,
+            height: 190,
             decoration: BoxDecoration(
               color: base,
-              borderRadius: BorderRadius.circular(22),
+              borderRadius: BorderRadius.circular(24),
             ),
           ),
         );
@@ -885,10 +892,10 @@ class _AtomicHabitsScreenState extends State<AtomicHabitsScreen> {
   }
 }
 
-class _CompactHabitCard extends StatefulWidget {
+class _HabitCard extends StatefulWidget {
   final String habit;
   final Map<DateTime, int> dates;
-  final List<HabitTaskEntry> entries;
+  final List<_HabitTaskEntry> entries;
   final bool isFavorite;
   final bool isDark;
   final VoidCallback onOpen;
@@ -896,7 +903,7 @@ class _CompactHabitCard extends StatefulWidget {
   final VoidCallback onRename;
   final VoidCallback? onMerge;
 
-  const _CompactHabitCard({
+  const _HabitCard({
     super.key,
     required this.habit,
     required this.dates,
@@ -910,10 +917,11 @@ class _CompactHabitCard extends StatefulWidget {
   });
 
   @override
-  State<_CompactHabitCard> createState() => _CompactHabitCardState();
+  State<_HabitCard> createState() => _HabitCardState();
 }
 
-class _CompactHabitCardState extends State<_CompactHabitCard> {
+class _HabitCardState extends State<_HabitCard>
+    with SingleTickerProviderStateMixin {
   bool _showHeatmap = false;
 
   int get _totalOccurrences =>
@@ -943,249 +951,671 @@ class _CompactHabitCardState extends State<_CompactHabitCard> {
   @override
   Widget build(BuildContext context) {
     final cardColor = widget.isDark ? const Color(0xFF15171C) : Colors.white;
-    final subtitleColor = widget.isDark ? Colors.white60 : Colors.black54;
+
+    return RepaintBoundary(
+      child: Material(
+        color: Colors.transparent,
+        child: Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: cardColor.withOpacity(0.94),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: widget.isDark
+                  ? Colors.white12
+                  : Colors.black.withOpacity(0.05),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: widget.isDark
+                    ? Colors.black.withOpacity(0.16)
+                    : Colors.black.withOpacity(0.045),
+                blurRadius: 12,
+                offset: const Offset(0, 5),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (widget.isFavorite)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: widget.isDark
+                                  ? const Color(0xFFFFD54F).withOpacity(0.14)
+                                  : const Color(0xFFFFF3CD),
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.star_rounded,
+                                  size: 14,
+                                  color: Color(0xFFF59E0B),
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Favorite',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .labelSmall
+                                      ?.copyWith(
+                                        fontWeight: FontWeight.w700,
+                                        color: const Color(0xFFF59E0B),
+                                      ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        if (widget.isFavorite) const SizedBox(height: 10),
+                        Text(
+                          widget.habit,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style:
+                              Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.w800,
+                                    height: 1.15,
+                                  ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          '${widget.entries.length} task${widget.entries.length == 1 ? '' : 's'} logged',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: widget.isDark ? Colors.white60 : Colors.black54,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        tooltip: widget.isFavorite
+                            ? 'Remove favorite'
+                            : 'Add favorite',
+                        onPressed: () {
+                          widget.onFavorite();
+                        },
+                        icon: Icon(
+                          widget.isFavorite
+                              ? Icons.star_rounded
+                              : Icons.star_outline_rounded,
+                          color: widget.isFavorite
+                              ? const Color(0xFFF59E0B)
+                              : (widget.isDark
+                                  ? Colors.white60
+                                  : Colors.black45),
+                        ),
+                      ),
+                      PopupMenuButton<String>(
+                        tooltip: 'Edit habit',
+                        icon: Icon(
+                          Icons.edit_outlined,
+                          color:
+                              widget.isDark ? Colors.white70 : Colors.black54,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        onSelected: (value) {
+                          if (value == 'rename') {
+                            widget.onRename();
+                          } else if (value == 'merge') {
+                            widget.onMerge?.call();
+                          }
+                        },
+                        itemBuilder: (context) => [
+                          const PopupMenuItem<String>(
+                            value: 'rename',
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.drive_file_rename_outline_rounded,
+                                  size: 18,
+                                ),
+                                SizedBox(width: 10),
+                                Text('Rename'),
+                              ],
+                            ),
+                          ),
+                          if (widget.onMerge != null)
+                            const PopupMenuItem<String>(
+                              value: 'merge',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.merge_rounded, size: 18),
+                                  SizedBox(width: 10),
+                                  Text('Merge'),
+                                ],
+                              ),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _StatPill(
+                    icon: Icons.check_circle_outline_rounded,
+                    label: '$_totalOccurrences total',
+                    isDark: widget.isDark,
+                  ),
+                  _StatPill(
+                    icon: Icons.calendar_today_rounded,
+                    label: '$_activeDays active days',
+                    isDark: widget.isDark,
+                  ),
+                  _StatPill(
+                    icon: Icons.local_fire_department_rounded,
+                    label: '$_streak day streak',
+                    isDark: widget.isDark,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(16),
+                  onTap: () {
+                    setState(() {
+                      _showHeatmap = !_showHeatmap;
+                    });
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 12,
+                    ),
+                    decoration: BoxDecoration(
+                      color: widget.isDark
+                          ? Colors.white.withOpacity(0.05)
+                          : const Color(0xFFF6F8FB),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: widget.isDark
+                            ? Colors.white10
+                            : Colors.black.withOpacity(0.04),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.grid_view_rounded,
+                          size: 18,
+                          color:
+                              widget.isDark ? Colors.white70 : Colors.black54,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            _showHeatmap ? 'Hide heatmap' : 'Show heatmap',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        AnimatedRotation(
+                          turns: _showHeatmap ? 0.5 : 0,
+                          duration: const Duration(milliseconds: 200),
+                          child: Icon(
+                            Icons.keyboard_arrow_down_rounded,
+                            color: widget.isDark
+                                ? Colors.white70
+                                : Colors.black54,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              AnimatedCrossFade(
+                duration: const Duration(milliseconds: 220),
+                crossFadeState: _showHeatmap
+                    ? CrossFadeState.showSecond
+                    : CrossFadeState.showFirst,
+                firstChild: const SizedBox.shrink(),
+                secondChild: Padding(
+                  padding: const EdgeInsets.only(top: 14),
+                  child: _HabitHeatmap(
+                    dates: widget.dates,
+                    isDark: widget.isDark,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: OutlinedButton.icon(
+                  onPressed: widget.onOpen,
+                  icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                  label: const Text('Open details'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 12,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HabitDetailsPage extends StatelessWidget {
+  final String habit;
+  final List<_HabitTaskEntry> entries;
+  final Map<DateTime, int> dates;
+  final bool isFavorite;
+
+  const _HabitDetailsPage({
+    required this.habit,
+    required this.entries,
+    required this.dates,
+    required this.isFavorite,
+  });
+
+  int get _totalOccurrences => entries.length;
+
+  int get _activeDays => dates.keys.length;
+
+  int get _streak {
+    if (dates.isEmpty) return 0;
+
+    final normalized = dates.keys
+        .map((d) => DateTime(d.year, d.month, d.day))
+        .toSet();
+
+    final today = DateTime.now();
+    var cursor = DateTime(today.year, today.month, today.day);
+    var streak = 0;
+
+    while (normalized.contains(cursor)) {
+      streak++;
+      cursor = cursor.subtract(const Duration(days: 1));
+    }
+
+    return streak;
+  }
+
+  Map<String, int> get _categoryBreakdown {
+    final map = <String, int>{};
+    for (final entry in entries) {
+      map[entry.category] = (map[entry.category] ?? 0) + 1;
+    }
+    return map;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardColor = isDark ? const Color(0xFF15171C) : Colors.white;
+    final topCategories = _categoryBreakdown.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+
+    return Scaffold(
+      extendBodyBehindAppBar: true,
+      appBar: AppBar(
+        title: const Text('Habit Details'),
+      ),
+      body: Stack(
+        children: [
+          const RepaintBoundary(
+            child: NeonRibbonBackground(),
+          ),
+          SafeArea(
+            child: CustomScrollView(
+              physics: const BouncingScrollPhysics(),
+              slivers: [
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+                    child: RepaintBoundary(
+                      child: Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: cardColor.withOpacity(0.94),
+                          borderRadius: BorderRadius.circular(26),
+                          border: Border.all(
+                            color: isDark
+                                ? Colors.white12
+                                : Colors.black.withOpacity(0.05),
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: isDark
+                                  ? Colors.black.withOpacity(0.16)
+                                  : Colors.black.withOpacity(0.045),
+                              blurRadius: 12,
+                              offset: const Offset(0, 5),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (isFavorite)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 5,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: isDark
+                                      ? const Color(0xFFFFD54F).withOpacity(0.14)
+                                      : const Color(0xFFFFF3CD),
+                                  borderRadius: BorderRadius.circular(999),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(
+                                      Icons.star_rounded,
+                                      size: 14,
+                                      color: Color(0xFFF59E0B),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'Favorite Habit',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .labelSmall
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.w700,
+                                            color: const Color(0xFFF59E0B),
+                                          ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            if (isFavorite) const SizedBox(height: 12),
+                            Text(
+                              habit,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .headlineSmall
+                                  ?.copyWith(fontWeight: FontWeight.w800),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Every task logged for this habit, with your heatmap on top.',
+                              style:
+                                  Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .onSurface
+                                            .withOpacity(0.65),
+                                      ),
+                            ),
+                            const SizedBox(height: 18),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: [
+                                _InfoChip(
+                                  icon: Icons.check_circle_outline_rounded,
+                                  label: '$_totalOccurrences tasks',
+                                  isDark: isDark,
+                                ),
+                                _InfoChip(
+                                  icon: Icons.calendar_today_rounded,
+                                  label: '$_activeDays active days',
+                                  isDark: isDark,
+                                ),
+                                _InfoChip(
+                                  icon: Icons.local_fire_department_rounded,
+                                  label: '$_streak day streak',
+                                  isDark: isDark,
+                                ),
+                              ],
+                            ),
+                            if (topCategories.isNotEmpty) ...[
+                              const SizedBox(height: 12),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: topCategories
+                                    .take(3)
+                                    .map(
+                                      (e) => _CategoryChip(
+                                        label: '${e.key} · ${e.value}',
+                                        isDark: isDark,
+                                      ),
+                                    )
+                                    .toList(growable: false),
+                              ),
+                            ],
+                            const SizedBox(height: 18),
+                            _HabitHeatmap(
+                              dates: dates,
+                              isDark: isDark,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 20, 16, 10),
+                    child: Row(
+                      children: [
+                        Text(
+                          'Task History',
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleLarge
+                              ?.copyWith(fontWeight: FontWeight.w800),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          '${entries.length}',
+                          style: TextStyle(
+                            color: isDark ? Colors.white54 : Colors.black45,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                if (entries.isEmpty)
+                  SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Text(
+                          'No tasks logged for this habit yet.',
+                          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurface
+                                    .withOpacity(0.65),
+                              ),
+                        ),
+                      ),
+                    ),
+                  )
+                else
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                    sliver: SliverList(
+                      delegate: SliverChildBuilderDelegate(
+                        (context, index) {
+                          final entry = entries[index];
+                          return Padding(
+                            padding: EdgeInsets.only(
+                              bottom: index == entries.length - 1 ? 0 : 10,
+                            ),
+                            child: _HabitTaskTile(
+                              entry: entry,
+                            ),
+                          );
+                        },
+                        childCount: entries.length,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HabitHeatmap extends StatelessWidget {
+  final Map<DateTime, int> dates;
+  final bool isDark;
+
+  const _HabitHeatmap({
+    required this.dates,
+    required this.isDark,
+  });
+
+  static const double _cell = 10;
+  static const double _gap = 3;
+  static const int _rows = 7;
+  static const double _monthLabelHeight = 16;
+  static const double _monthLabelGap = 6;
+
+  Color _colorForCount(int count) {
+    if (count <= 0) {
+      return isDark ? Colors.white.withOpacity(0.06) : const Color(0xFFE9EDF3);
+    }
+
+    if (isDark) {
+      if (count == 1) return const Color(0xFF1D7AFC).withOpacity(0.45);
+      if (count == 2) return const Color(0xFF1D7AFC).withOpacity(0.65);
+      if (count == 3) return const Color(0xFF1D7AFC).withOpacity(0.82);
+      return const Color(0xFF63A4FF);
+    }
+
+    if (count == 1) return const Color(0xFFD6E8FF);
+    if (count == 2) return const Color(0xFFA9CEFF);
+    if (count == 3) return const Color(0xFF6FAEFF);
+    return const Color(0xFF1D7AFC);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final today = DateUtils.dateOnly(DateTime.now());
+    final firstVisibleDay = today.subtract(const Duration(days: 364));
+    final gridStart =
+        firstVisibleDay.subtract(Duration(days: firstVisibleDay.weekday % 7));
+    final totalDays = today.difference(gridStart).inDays + 1;
+    final totalWeeks = (totalDays / 7).ceil();
+
+    final columnWidth = _cell + _gap;
+    final contentWidth = totalWeeks * columnWidth;
+    final gridHeight = (_rows * (_cell + _gap)) - _gap;
+    final chartHeight = _monthLabelHeight + _monthLabelGap + gridHeight;
+
+    final normalizedDates = <DateTime, int>{};
+    dates.forEach((key, value) {
+      normalizedDates[DateUtils.dateOnly(key)] = value;
+    });
 
     return RepaintBoundary(
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: cardColor.withOpacity(0.95),
-          borderRadius: BorderRadius.circular(22),
+          color: isDark
+              ? Colors.white.withOpacity(0.04)
+              : const Color(0xFFF8FAFC),
+          borderRadius: BorderRadius.circular(18),
           border: Border.all(
-            color:
-                widget.isDark ? Colors.white10 : Colors.black.withOpacity(0.05),
+            color: isDark ? Colors.white10 : Colors.black.withOpacity(0.05),
           ),
-          boxShadow: [
-            BoxShadow(
-              color: widget.isDark
-                  ? Colors.black.withOpacity(0.16)
-                  : Colors.black.withOpacity(0.045),
-              blurRadius: 12,
-              offset: const Offset(0, 5),
-            ),
-          ],
         ),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(16),
-                    onTap: widget.onOpen,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 2,
-                        vertical: 2,
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              if (widget.isFavorite) ...[
-                                const Icon(
-                                  Icons.star_rounded,
-                                  size: 16,
-                                  color: Color(0xFFF59E0B),
-                                ),
-                                const SizedBox(width: 6),
-                              ],
-                              Expanded(
-                                child: Text(
-                                  widget.habit,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .titleSmall
-                                      ?.copyWith(
-                                        fontWeight: FontWeight.w800,
-                                        height: 1.15,
-                                      ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            '${widget.entries.length} tasks logged',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: subtitleColor,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              reverse: true,
+              physics: const BouncingScrollPhysics(),
+              child: SizedBox(
+                width: contentWidth,
+                height: chartHeight,
+                child: CustomPaint(
+                  painter: _HeatmapPainter(
+                    dateCounts: normalizedDates,
+                    isDark: isDark,
+                    today: today,
+                    firstVisibleDay: firstVisibleDay,
+                    gridStart: gridStart,
+                    totalWeeks: totalWeeks,
+                    cell: _cell,
+                    gap: _gap,
+                    rows: _rows,
+                    monthLabelHeight: _monthLabelHeight,
+                    monthLabelGap: _monthLabelGap,
                   ),
                 ),
-                const SizedBox(width: 8),
-                _MiniIconButton(
-                  tooltip:
-                      widget.isFavorite ? 'Remove favorite' : 'Add favorite',
-                  icon: widget.isFavorite
-                      ? Icons.star_rounded
-                      : Icons.star_outline_rounded,
-                  iconColor: widget.isFavorite
-                      ? const Color(0xFFF59E0B)
-                      : (widget.isDark ? Colors.white60 : Colors.black45),
-                  onTap: () {
-                    widget.onFavorite();
-                  },
-                ),
-                PopupMenuButton<String>(
-                  tooltip: 'More',
-                  icon: Icon(
-                    Icons.more_horiz_rounded,
-                    color: widget.isDark ? Colors.white70 : Colors.black54,
-                  ),
-                  padding: EdgeInsets.zero,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  onSelected: (value) {
-                    if (value == 'details') {
-                      widget.onOpen();
-                    } else if (value == 'rename') {
-                      widget.onRename();
-                    } else if (value == 'merge') {
-                      widget.onMerge?.call();
-                    }
-                  },
-                  itemBuilder: (context) => [
-                    const PopupMenuItem<String>(
-                      value: 'details',
-                      child: Row(
-                        children: [
-                          Icon(Icons.open_in_new_rounded, size: 18),
-                          SizedBox(width: 10),
-                          Text('Open details'),
-                        ],
-                      ),
-                    ),
-                    const PopupMenuItem<String>(
-                      value: 'rename',
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.drive_file_rename_outline_rounded,
-                            size: 18,
-                          ),
-                          SizedBox(width: 10),
-                          Text('Rename'),
-                        ],
-                      ),
-                    ),
-                    if (widget.onMerge != null)
-                      const PopupMenuItem<String>(
-                        value: 'merge',
-                        child: Row(
-                          children: [
-                            Icon(Icons.merge_rounded, size: 18),
-                            SizedBox(width: 10),
-                            Text('Merge'),
-                          ],
-                        ),
-                      ),
-                  ],
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                _MetricPill(
-                  icon: Icons.check_circle_outline_rounded,
-                  label: '$_totalOccurrences',
-                  helper: 'Total',
-                  isDark: widget.isDark,
-                ),
-                _MetricPill(
-                  icon: Icons.calendar_today_rounded,
-                  label: '$_activeDays',
-                  helper: 'Days',
-                  isDark: widget.isDark,
-                ),
-                _MetricPill(
-                  icon: Icons.local_fire_department_rounded,
-                  label: '$_streak',
-                  helper: 'Streak',
-                  isDark: widget.isDark,
-                ),
-              ],
+              ),
             ),
             const SizedBox(height: 10),
-            InkWell(
-              borderRadius: BorderRadius.circular(16),
-              onTap: () {
-                setState(() {
-                  _showHeatmap = !_showHeatmap;
-                });
-              },
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
-                decoration: BoxDecoration(
-                  color: widget.isDark
-                      ? Colors.white.withOpacity(0.05)
-                      : const Color(0xFFF6F8FB),
-                  borderRadius: BorderRadius.circular(16),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Text(
+                  'Less',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: isDark ? Colors.white54 : Colors.black54,
+                  ),
                 ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.grid_view_rounded,
-                      size: 17,
-                      color: widget.isDark ? Colors.white70 : Colors.black54,
+                for (int i = 0; i < 5; i++)
+                  Container(
+                    width: 10,
+                    height: 10,
+                    decoration: BoxDecoration(
+                      color: _colorForCount(i),
+                      borderRadius: BorderRadius.circular(3),
                     ),
-                    const SizedBox(width: 10),
-                    Text(
-                      'Heatmap',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        color: widget.isDark ? Colors.white : Colors.black87,
-                      ),
-                    ),
-                    const Spacer(),
-                    Text(
-                      _showHeatmap ? 'Hide' : 'Show',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: subtitleColor,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    AnimatedRotation(
-                      turns: _showHeatmap ? 0.5 : 0,
-                      duration: const Duration(milliseconds: 180),
-                      child: Icon(
-                        Icons.keyboard_arrow_down_rounded,
-                        color: widget.isDark ? Colors.white70 : Colors.black54,
-                      ),
-                    ),
-                  ],
+                  ),
+                Text(
+                  'More',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: isDark ? Colors.white54 : Colors.black54,
+                  ),
                 ),
-              ),
-            ),
-            AnimatedCrossFade(
-              duration: const Duration(milliseconds: 220),
-              crossFadeState: _showHeatmap
-                  ? CrossFadeState.showSecond
-                  : CrossFadeState.showFirst,
-              firstChild: const SizedBox.shrink(),
-              secondChild: Padding(
-                padding: const EdgeInsets.only(top: 12),
-                child: HabitHeatmap(
-                  dates: widget.dates,
-                  isDark: widget.isDark,
-                ),
-              ),
+              ],
             ),
           ],
         ),
@@ -1194,61 +1624,132 @@ class _CompactHabitCardState extends State<_CompactHabitCard> {
   }
 }
 
-class _SearchBar extends StatelessWidget {
-  final TextEditingController controller;
+class _HeatmapPainter extends CustomPainter {
+  final Map<DateTime, int> dateCounts;
   final bool isDark;
-  final bool hasText;
-  final VoidCallback onClear;
+  final DateTime today;
+  final DateTime firstVisibleDay;
+  final DateTime gridStart;
+  final int totalWeeks;
+  final double cell;
+  final double gap;
+  final int rows;
+  final double monthLabelHeight;
+  final double monthLabelGap;
 
-  const _SearchBar({
-    required this.controller,
+  const _HeatmapPainter({
+    required this.dateCounts,
     required this.isDark,
-    required this.hasText,
-    required this.onClear,
+    required this.today,
+    required this.firstVisibleDay,
+    required this.gridStart,
+    required this.totalWeeks,
+    required this.cell,
+    required this.gap,
+    required this.rows,
+    required this.monthLabelHeight,
+    required this.monthLabelGap,
   });
 
-  @override
-  Widget build(BuildContext context) {
-    final fillColor = isDark
-        ? const Color(0xFF15171C).withOpacity(0.94)
-        : Colors.white.withOpacity(0.94);
+  static const List<String> _months = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
 
-    return RepaintBoundary(
-      child: Container(
-        decoration: BoxDecoration(
-          color: fillColor,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: isDark ? Colors.white12 : Colors.black.withOpacity(0.05),
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: isDark
-                  ? Colors.black.withOpacity(0.14)
-                  : Colors.black.withOpacity(0.045),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: TextField(
-          controller: controller,
-          decoration: InputDecoration(
-            hintText: 'Search habits...',
-            prefixIcon: const Icon(Icons.search_rounded),
-            suffixIcon: hasText
-                ? IconButton(
-                    onPressed: onClear,
-                    icon: const Icon(Icons.close_rounded),
-                  )
-                : null,
-            border: InputBorder.none,
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
-          ),
-        ),
-      ),
+  Color _colorForCount(int count) {
+    if (count <= 0) {
+      return isDark ? Colors.white.withOpacity(0.06) : const Color(0xFFE9EDF3);
+    }
+
+    if (isDark) {
+      if (count == 1) return const Color(0xFF1D7AFC).withOpacity(0.45);
+      if (count == 2) return const Color(0xFF1D7AFC).withOpacity(0.65);
+      if (count == 3) return const Color(0xFF1D7AFC).withOpacity(0.82);
+      return const Color(0xFF63A4FF);
+    }
+
+    if (count == 1) return const Color(0xFFD6E8FF);
+    if (count == 2) return const Color(0xFFA9CEFF);
+    if (count == 3) return const Color(0xFF6FAEFF);
+    return const Color(0xFF1D7AFC);
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final columnWidth = cell + gap;
+    final gridTop = monthLabelHeight + monthLabelGap;
+    final textStyle = TextStyle(
+      fontSize: 10,
+      color: isDark ? Colors.white54 : Colors.black54,
+      fontWeight: FontWeight.w500,
     );
+
+    final paint = Paint()..style = PaintingStyle.fill;
+
+    for (int weekIndex = 0; weekIndex < totalWeeks; weekIndex++) {
+      final weekDate = gridStart.add(Duration(days: weekIndex * 7));
+      final previousWeekDate =
+          weekIndex == 0 ? null : gridStart.add(Duration(days: (weekIndex - 1) * 7));
+
+      final showLabel = weekIndex == 0 ||
+          (previousWeekDate != null && weekDate.month != previousWeekDate.month);
+
+      if (showLabel) {
+        final tp = TextPainter(
+          text: TextSpan(
+            text: _months[weekDate.month - 1],
+            style: textStyle,
+          ),
+          textDirection: TextDirection.ltr,
+          maxLines: 1,
+        )..layout(maxWidth: columnWidth + 20);
+
+        tp.paint(canvas, Offset(weekIndex * columnWidth, 0));
+      }
+
+      for (int dayIndex = 0; dayIndex < rows; dayIndex++) {
+        final date = gridStart.add(Duration(days: weekIndex * 7 + dayIndex));
+        final isOutsideRange =
+            date.isBefore(firstVisibleDay) || date.isAfter(today);
+
+        if (isOutsideRange) continue;
+
+        final count = dateCounts[date] ?? 0;
+        paint.color = _colorForCount(count);
+
+        final rect = Rect.fromLTWH(
+          weekIndex * columnWidth,
+          gridTop + dayIndex * (cell + gap),
+          cell,
+          cell,
+        );
+
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(rect, const Radius.circular(3)),
+          paint,
+        );
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _HeatmapPainter oldDelegate) {
+    return oldDelegate.dateCounts != dateCounts ||
+        oldDelegate.isDark != isDark ||
+        oldDelegate.today != today ||
+        oldDelegate.firstVisibleDay != firstVisibleDay ||
+        oldDelegate.gridStart != gridStart ||
+        oldDelegate.totalWeeks != totalWeeks;
   }
 }
 
@@ -1580,6 +2081,64 @@ class _MergeHabitPageState extends State<_MergeHabitPage> {
   }
 }
 
+class _SearchBar extends StatelessWidget {
+  final TextEditingController controller;
+  final bool isDark;
+  final bool hasText;
+  final VoidCallback onClear;
+
+  const _SearchBar({
+    required this.controller,
+    required this.isDark,
+    required this.hasText,
+    required this.onClear,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final fillColor = isDark
+        ? const Color(0xFF15171C).withOpacity(0.94)
+        : Colors.white.withOpacity(0.94);
+
+    return RepaintBoundary(
+      child: Container(
+        decoration: BoxDecoration(
+          color: fillColor,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isDark ? Colors.white12 : Colors.black.withOpacity(0.05),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: isDark
+                  ? Colors.black.withOpacity(0.14)
+                  : Colors.black.withOpacity(0.045),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: TextField(
+          controller: controller,
+          decoration: InputDecoration(
+            hintText: 'Search habits...',
+            prefixIcon: const Icon(Icons.search_rounded),
+            suffixIcon: hasText
+                ? IconButton(
+                    onPressed: onClear,
+                    icon: const Icon(Icons.close_rounded),
+                  )
+                : null,
+            border: InputBorder.none,
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _SheetSearchField extends StatelessWidget {
   final TextEditingController controller;
   final String hintText;
@@ -1700,27 +2259,261 @@ class _MergeTargetTile extends StatelessWidget {
   }
 }
 
-class _MetricPill extends StatelessWidget {
+class _HabitTaskTile extends StatelessWidget {
+  final _HabitTaskEntry entry;
+
+  const _HabitTaskTile({
+    required this.entry,
+  });
+
+  Color _difficultyColor(String difficulty) {
+    switch (difficulty.toUpperCase()) {
+      case 'EASY':
+        return const Color(0xFF34C759);
+      case 'MEDIUM':
+        return const Color(0xFFFF9500);
+      case 'HARD':
+        return const Color(0xFFE84545);
+      default:
+        return Colors.grey;
+    }
+  }
+
+  IconData _categoryIcon(String category) {
+    switch (category) {
+      case 'Health':
+        return Icons.favorite_outline_rounded;
+      case 'Work':
+        return Icons.work_outline_rounded;
+      case 'Play':
+        return Icons.sports_esports_outlined;
+      default:
+        return Icons.check_circle_outline_rounded;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return RepaintBoundary(
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color:
+              (isDark ? const Color(0xFF15171C) : Colors.white).withOpacity(0.94),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isDark ? Colors.white10 : Colors.black.withOpacity(0.05),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: isDark
+                  ? Colors.black.withOpacity(0.14)
+                  : Colors.black.withOpacity(0.04),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                color: _difficultyColor(entry.difficulty).withOpacity(0.12),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Icon(
+                _categoryIcon(entry.category),
+                color: _difficultyColor(entry.difficulty),
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    entry.title,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      height: 1.25,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _TinyMetaChip(
+                        icon: Icons.event_outlined,
+                        label: entry.formattedDate,
+                      ),
+                      _TinyMetaChip(
+                        icon: Icons.category_outlined,
+                        label: entry.category,
+                      ),
+                      _TinyMetaChip(
+                        icon: Icons.bolt_outlined,
+                        label: entry.difficulty.toUpperCase(),
+                        color: _difficultyColor(entry.difficulty),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TinyMetaChip extends StatelessWidget {
   final IconData icon;
   final String label;
-  final String helper;
-  final bool isDark;
+  final Color? color;
 
-  const _MetricPill({
+  const _TinyMetaChip({
     required this.icon,
     required this.label,
-    required this.helper,
+    this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final iconColor = color ?? (isDark ? Colors.white60 : Colors.black54);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: isDark
+            ? Colors.white.withOpacity(0.06)
+            : const Color(0xFFF4F7FB),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 13, color: iconColor),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w600,
+              color: isDark ? Colors.white70 : Colors.black87,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CategoryChip extends StatelessWidget {
+  final String label;
+  final bool isDark;
+
+  const _CategoryChip({
+    required this.label,
     required this.isDark,
   });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
       decoration: BoxDecoration(
         color: isDark
             ? Colors.white.withOpacity(0.06)
             : const Color(0xFFF4F7FB),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: isDark ? Colors.white70 : Colors.black87,
+        ),
+      ),
+    );
+  }
+}
+
+class _InfoChip extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool isDark;
+
+  const _InfoChip({
+    required this.icon,
+    required this.label,
+    required this.isDark,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: isDark
+            ? const Color(0xFF15171C).withOpacity(0.92)
+            : Colors.white.withOpacity(0.92),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(
+          color: isDark ? Colors.white12 : Colors.black.withOpacity(0.05),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            icon,
+            size: 15,
+            color: isDark ? Colors.white70 : Colors.black54,
+          ),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: isDark ? Colors.white70 : Colors.black87,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatPill extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool isDark;
+
+  const _StatPill({
+    required this.icon,
+    required this.label,
+    required this.isDark,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: isDark
+            ? Colors.white.withOpacity(0.06)
+            : const Color(0xFFF3F6FA),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Row(
@@ -1736,17 +2529,8 @@ class _MetricPill extends StatelessWidget {
             label,
             style: TextStyle(
               fontSize: 12,
-              fontWeight: FontWeight.w800,
-              color: isDark ? Colors.white : Colors.black87,
-            ),
-          ),
-          const SizedBox(width: 4),
-          Text(
-            helper,
-            style: TextStyle(
-              fontSize: 11.5,
+              color: isDark ? Colors.white70 : Colors.black87,
               fontWeight: FontWeight.w500,
-              color: isDark ? Colors.white60 : Colors.black54,
             ),
           ),
         ],
@@ -1755,44 +2539,25 @@ class _MetricPill extends StatelessWidget {
   }
 }
 
-class _MiniIconButton extends StatelessWidget {
-  final String tooltip;
-  final IconData icon;
-  final Color iconColor;
-  final VoidCallback onTap;
+class _HabitTaskEntry {
+  final DateTime date;
+  final String title;
+  final String category;
+  final String difficulty;
+  final String habit;
 
-  const _MiniIconButton({
-    required this.tooltip,
-    required this.icon,
-    required this.iconColor,
-    required this.onTap,
+  const _HabitTaskEntry({
+    required this.date,
+    required this.title,
+    required this.category,
+    required this.difficulty,
+    required this.habit,
   });
 
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return Tooltip(
-      message: tooltip,
-      child: Material(
-        color: isDark
-            ? Colors.white.withOpacity(0.06)
-            : const Color(0xFFF4F7FB),
-        borderRadius: BorderRadius.circular(12),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: onTap,
-          child: SizedBox(
-            width: 36,
-            height: 36,
-            child: Icon(
-              icon,
-              size: 18,
-              color: iconColor,
-            ),
-          ),
-        ),
-      ),
-    );
+  String get formattedDate {
+    final day = date.day.toString().padLeft(2, '0');
+    final month = date.month.toString().padLeft(2, '0');
+    final year = date.year.toString();
+    return '$day-$month-$year';
   }
 }

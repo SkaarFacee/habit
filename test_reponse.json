@@ -1,0 +1,99 @@
+{
+        "Daily Goals": [
+            {
+                "title": "Brainstorm ideas for deep learning and AI studio",
+                "status": "needsAction",
+                "completed": "Not complete",
+                "llm_output": {"category": "Work", "diificulty": "MEDIUM"},
+            },
+            {
+                "title": "Read paper and make notes while coming back from uni",
+                "status": "completed",
+                "completed": "04-03-2026",
+                "llm_output": {"category": "Work", "diificulty": "MEDIUM"},
+            },
+            {
+                "title": "Schedule the linked post",
+                "status": "needsAction",
+                "completed": "Not complete",
+                "llm_output": {"category": "Work", "diificulty": "EASY"},
+            },
+            {
+                "title": "Read paper and make notes on the way to uni",
+                "status": "completed",
+                "completed": "04-03-2026",
+                "llm_output": {"category": "Work", "diificulty": "MEDIUM"},
+            },
+            {
+                "title": "Notes for deep learning",
+                "status": "needsAction",
+                "completed": "Not complete",
+                "llm_output": {"category": "Work", "diificulty": "MEDIUM"},
+            },
+        ],
+            "Assignments": [
+        {
+            "title": "DFA - HARD ",
+            "status": "completed",
+            "completed": "08-05-2025",
+            "llm_output": {
+                "category": "Work",
+                "diificulty": "HARD"
+            }
+        },
+        {
+            "title": "Testing 1",
+            "status": "needsAction",
+            "completed": "Not complete",
+            "llm_output": {
+                "category": "Work",
+                "diificulty": "EASY"
+            }
+        },
+        {
+            "title": "Fuzzy logic and Neural Network - HARD ",
+            "status": "completed",
+            "completed": "04-04-2025",
+            "llm_output": {
+                "category": "Work",
+                "diificulty": "HARD"
+            }
+        },
+        {
+            "title": "Testing 2",
+            "status": "needsAction",
+            "completed": "Not complete",
+            "llm_output": {
+                "category": "Work",
+                "diificulty": "EASY"
+            }
+        },
+        {
+            "title": "Data Analystics Assignment",
+            "status": "needsAction",
+            "completed": "Not complete",
+            "llm_output": {
+                "category": "Work",
+                "diificulty": "HARD"
+            }
+        },
+        {
+            "title": "Innovation Managamenet",
+            "status": "completed",
+            "completed": "17-03-2025",
+            "llm_output": {
+                "category": "Work",
+                "diificulty": "HARD"
+            }
+        },
+        {
+            "title": "Testing 3",
+            "status": "needsAction",
+            "completed": "Not complete",
+            "llm_output": {
+                "category": "Work",
+                "diificulty": "EASY"
+            }
+        }
+    ]
+}
