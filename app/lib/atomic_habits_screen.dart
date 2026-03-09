@@ -8,7 +8,9 @@ import 'shared/neon_ribbon_background.dart';
 import 'shared/theme.dart';
 
 class AtomicHabitsScreen extends StatefulWidget {
-  const AtomicHabitsScreen({super.key});
+  final String? routine;
+
+  const AtomicHabitsScreen({super.key, this.routine});
 
   @override
   State<AtomicHabitsScreen> createState() => _AtomicHabitsScreenState();
@@ -16,6 +18,7 @@ class AtomicHabitsScreen extends StatefulWidget {
 
 class _AtomicHabitsScreenState extends State<AtomicHabitsScreen> {
   static const String _trackerRootKey = 'Tracker';
+  static const String _otherRoutineName = 'Other';
 
   final DocumentReference<Map<String, dynamic>> _trackerRef =
       FirebaseFirestore.instance.collection('habit').doc('tracker');
@@ -30,7 +33,11 @@ class _AtomicHabitsScreenState extends State<AtomicHabitsScreen> {
   Map<String, Map<DateTime, int>> _habitDateMap = {};
   Map<String, List<HabitTaskEntry>> _habitTaskMap = {};
 
-  List<String> _allHabits = [];
+  List<String> _screenHabits = [];
+  List<String> _globalHabits = [];
+  List<String> _globalFavorites = [];
+  Map<String, List<String>> _habitsByRoutine = {};
+  Map<String, List<String>> _favoritesByRoutine = {};
   List<String> _favorites = [];
 
   List<String> _combinedHabits = [];
@@ -41,8 +48,37 @@ class _AtomicHabitsScreenState extends State<AtomicHabitsScreen> {
 
   String _searchQuery = '';
   int _visibleCount = 5;
-  bool _loading = true;
+  bool _trackerLoaded = false;
+  bool _habitsLoaded = false;
   bool _saving = false;
+
+  bool get _isRoutineMode => widget.routine?.trim().isNotEmpty == true;
+
+  String? get _activeRoutine => _isRoutineMode ? widget.routine!.trim() : null;
+
+  bool get _loading => !_trackerLoaded || !_habitsLoaded;
+
+  bool _sameHabit(String a, String b) =>
+      a.trim().toLowerCase() == b.trim().toLowerCase();
+
+  bool _containsHabit(Iterable<String> values, String habit) {
+    return values.any((v) => _sameHabit(v, habit));
+  }
+
+  bool _isOtherRoutineName(String? routine) {
+    if (routine == null) return false;
+    return _sameHabit(routine, _otherRoutineName);
+  }
+
+  String? _matchingRoutineKey(
+    Map<String, List<String>> map,
+    String routineName,
+  ) {
+    for (final key in map.keys) {
+      if (_sameHabit(key, routineName)) return key;
+    }
+    return null;
+  }
 
   @override
   void initState() {
@@ -60,13 +96,13 @@ class _AtomicHabitsScreenState extends State<AtomicHabitsScreen> {
           _rawTrackerData = raw;
           _habitTaskMap = taskMap;
           _habitDateMap = dateMap;
-          _loading = false;
+          _trackerLoaded = true;
           _recomputeHabitLists();
         });
       },
       onError: (_) {
         if (!mounted) return;
-        setState(() => _loading = false);
+        setState(() => _trackerLoaded = true);
       },
     );
 
@@ -74,11 +110,40 @@ class _AtomicHabitsScreenState extends State<AtomicHabitsScreen> {
       (snap) {
         final raw = Map<String, dynamic>.from(snap.data() ?? {});
         if (!mounted) return;
+
+        final globalHabits = _stringList(raw['habits']);
+        final globalFavorites = _stringList(raw['favorites']);
+        final habitsByRoutine = _stringListMap(raw['habits_by_routine']);
+        final favoritesByRoutine = _stringListMap(raw['favorites_by_routine']);
+
+        final routineName = _activeRoutine;
+        final screenHabits = _routineHabitsFor(
+          routineName: routineName,
+          globalHabits: globalHabits,
+          habitsByRoutine: habitsByRoutine,
+        );
+
+        final favorites = _routineFavoritesFor(
+          routineName: routineName,
+          globalFavorites: globalFavorites,
+          screenHabits: screenHabits,
+          favoritesByRoutine: favoritesByRoutine,
+        );
+
         setState(() {
-          _allHabits = _stringList(raw['habits']);
-          _favorites = _stringList(raw['favorites']);
+          _globalHabits = globalHabits;
+          _globalFavorites = globalFavorites;
+          _habitsByRoutine = habitsByRoutine;
+          _favoritesByRoutine = favoritesByRoutine;
+          _screenHabits = screenHabits;
+          _favorites = favorites;
+          _habitsLoaded = true;
           _recomputeHabitLists();
         });
+      },
+      onError: (_) {
+        if (!mounted) return;
+        setState(() => _habitsLoaded = true);
       },
     );
 
@@ -103,14 +168,16 @@ class _AtomicHabitsScreenState extends State<AtomicHabitsScreen> {
   }
 
   void _recomputeHabitLists() {
-    final combined = _dedupeStrings([
-      ..._allHabits,
-      ..._habitDateMap.keys,
-    ]);
+    final base = _isRoutineMode
+        ? List<String>.from(_screenHabits)
+        : _dedupeStrings([
+            ..._screenHabits,
+            ..._habitDateMap.keys,
+          ]);
 
     final filtered = _searchQuery.isEmpty
-        ? List<String>.from(combined)
-        : combined
+        ? List<String>.from(base)
+        : base
             .where((h) => h.toLowerCase().contains(_searchQuery))
             .toList(growable: false);
 
@@ -123,7 +190,7 @@ class _AtomicHabitsScreenState extends State<AtomicHabitsScreen> {
       return a.toLowerCase().compareTo(b.toLowerCase());
     });
 
-    _combinedHabits = combined;
+    _combinedHabits = base;
     _filteredHabits = filtered;
     _visibleHabits = filtered.take(_visibleCount).toList(growable: false);
   }
@@ -133,6 +200,15 @@ class _AtomicHabitsScreenState extends State<AtomicHabitsScreen> {
     return _dedupeStrings(value.whereType<String>());
   }
 
+  Map<String, List<String>> _stringListMap(dynamic value) {
+    if (value is! Map) return {};
+    final out = <String, List<String>>{};
+    value.forEach((key, rawValue) {
+      out[key.toString()] = _stringList(rawValue);
+    });
+    return out;
+  }
+
   List<String> _dedupeStrings(Iterable<String> values) {
     final seen = <String>{};
     final out = <String>[];
@@ -140,17 +216,77 @@ class _AtomicHabitsScreenState extends State<AtomicHabitsScreen> {
     for (final raw in values) {
       final value = raw.trim();
       if (value.isEmpty) continue;
+
       final key = value.toLowerCase();
       if (seen.add(key)) out.add(value);
     }
     return out;
   }
 
-  bool _sameHabit(String a, String b) =>
-      a.trim().toLowerCase() == b.trim().toLowerCase();
+  List<String> _allKnownHabits() {
+    return _dedupeStrings([
+      ..._globalHabits,
+      ..._habitDateMap.keys,
+      ..._habitsByRoutine.values.expand((items) => items),
+    ]);
+  }
 
-  bool _containsHabit(Iterable<String> values, String habit) {
-    return values.any((v) => _sameHabit(v, habit));
+  List<String> _computeUnassignedHabits(
+    List<String> globalHabits,
+    Map<String, List<String>> habitsByRoutine,
+  ) {
+    final assigned = <String>{};
+
+    habitsByRoutine.forEach((routine, habits) {
+      if (_isOtherRoutineName(routine)) return;
+
+      for (final habit in habits) {
+        final normalized = habit.trim().toLowerCase();
+        if (normalized.isNotEmpty) {
+          assigned.add(normalized);
+        }
+      }
+    });
+
+    return globalHabits
+        .where((habit) => !assigned.contains(habit.trim().toLowerCase()))
+        .toList(growable: false);
+  }
+
+  List<String> _routineHabitsFor({
+    required String? routineName,
+    required List<String> globalHabits,
+    required Map<String, List<String>> habitsByRoutine,
+  }) {
+    if (routineName == null) {
+      return globalHabits;
+    }
+
+    if (_isOtherRoutineName(routineName)) {
+      return _computeUnassignedHabits(globalHabits, habitsByRoutine);
+    }
+
+    final key = _matchingRoutineKey(habitsByRoutine, routineName);
+    return List<String>.from(key == null ? const [] : habitsByRoutine[key] ?? const []);
+  }
+
+  List<String> _routineFavoritesFor({
+    required String? routineName,
+    required List<String> globalFavorites,
+    required List<String> screenHabits,
+    required Map<String, List<String>> favoritesByRoutine,
+  }) {
+    if (routineName == null) {
+      return globalFavorites;
+    }
+
+    final key = _matchingRoutineKey(favoritesByRoutine, routineName);
+    final routineFavorites =
+        List<String>.from(key == null ? const [] : favoritesByRoutine[key] ?? const []);
+
+    return routineFavorites
+        .where((favorite) => _containsHabit(screenHabits, favorite))
+        .toList(growable: false);
   }
 
   Map<String, dynamic>? _asMap(dynamic value) {
@@ -344,24 +480,35 @@ class _AtomicHabitsScreenState extends State<AtomicHabitsScreen> {
     required List<String> source,
     required String oldName,
     required String newName,
-    bool ensureNewName = false,
   }) {
     final seen = <String>{};
     final out = <String>[];
-    var replaced = false;
 
     for (final item in source) {
       final next = _sameHabit(item, oldName) ? newName.trim() : item.trim();
-      if (_sameHabit(item, oldName)) replaced = true;
       if (next.isEmpty) continue;
 
       final key = next.toLowerCase();
       if (seen.add(key)) out.add(next);
     }
 
-    if ((replaced || ensureNewName) && !_containsHabit(out, newName)) {
-      out.add(newName.trim());
-    }
+    return out;
+  }
+
+  Map<String, List<String>> _replaceInListMap({
+    required Map<String, List<String>> source,
+    required String oldName,
+    required String newName,
+  }) {
+    final out = <String, List<String>>{};
+
+    source.forEach((key, values) {
+      out[key] = _replaceInList(
+        source: values,
+        oldName: oldName,
+        newName: newName,
+      );
+    });
 
     return out;
   }
@@ -395,7 +542,7 @@ class _AtomicHabitsScreenState extends State<AtomicHabitsScreen> {
       return 'Enter a different name.';
     }
 
-    final existingOtherHabit = _combinedHabits.any(
+    final existingOtherHabit = _allKnownHabits().any(
       (habit) => _sameHabit(habit, trimmed) && !_sameHabit(habit, oldName),
     );
 
@@ -415,20 +562,43 @@ class _AtomicHabitsScreenState extends State<AtomicHabitsScreen> {
       await FirebaseFirestore.instance.runTransaction((tx) async {
         final habitsSnap = await tx.get(_atomicHabitsRef);
         final raw = Map<String, dynamic>.from(habitsSnap.data() ?? {});
+        final routineName = _activeRoutine;
 
-        final favorites = _stringList(raw['favorites']);
+        if (routineName != null) {
+          final favoritesByRoutine = _stringListMap(raw['favorites_by_routine']);
+          final routineKey =
+              _matchingRoutineKey(favoritesByRoutine, routineName) ?? routineName;
+          final favorites =
+              List<String>.from(favoritesByRoutine[routineKey] ?? const []);
 
-        if (_containsHabit(favorites, habit)) {
-          favorites.removeWhere((h) => _sameHabit(h, habit));
+          if (_containsHabit(favorites, habit)) {
+            favorites.removeWhere((h) => _sameHabit(h, habit));
+          } else {
+            favorites.add(habit);
+          }
+
+          tx.set(
+            _atomicHabitsRef,
+            {
+              'favorites_by_routine.$routineKey': _dedupeStrings(favorites),
+            },
+            SetOptions(merge: true),
+          );
         } else {
-          favorites.add(habit);
-        }
+          final favorites = _stringList(raw['favorites']);
 
-        tx.set(
-          _atomicHabitsRef,
-          {'favorites': _dedupeStrings(favorites)},
-          SetOptions(merge: true),
-        );
+          if (_containsHabit(favorites, habit)) {
+            favorites.removeWhere((h) => _sameHabit(h, habit));
+          } else {
+            favorites.add(habit);
+          }
+
+          tx.set(
+            _atomicHabitsRef,
+            {'favorites': _dedupeStrings(favorites)},
+            SetOptions(merge: true),
+          );
+        }
       });
 
       final localFavorites = List<String>.from(_favorites);
@@ -441,6 +611,21 @@ class _AtomicHabitsScreenState extends State<AtomicHabitsScreen> {
       if (!mounted) return false;
       setState(() {
         _favorites = _dedupeStrings(localFavorites);
+
+        if (_activeRoutine != null) {
+          final routineKey = _matchingRoutineKey(
+                _favoritesByRoutine,
+                _activeRoutine!,
+              ) ??
+              _activeRoutine!;
+          _favoritesByRoutine = {
+            ..._favoritesByRoutine,
+            routineKey: List<String>.from(_favorites),
+          };
+        } else {
+          _globalFavorites = List<String>.from(_favorites);
+        }
+
         _recomputeHabitLists();
       });
 
@@ -475,16 +660,28 @@ class _AtomicHabitsScreenState extends State<AtomicHabitsScreen> {
 
         final habitList = _stringList(habitsData['habits']);
         final favoriteList = _stringList(habitsData['favorites']);
+        final habitsByRoutine = _stringListMap(habitsData['habits_by_routine']);
+        final favoritesByRoutine =
+            _stringListMap(habitsData['favorites_by_routine']);
 
         final updatedTracker = _rewriteTracker(trackerData, oldName, trimmed);
         final updatedHabits = _replaceInList(
           source: habitList,
           oldName: oldName,
           newName: trimmed,
-          ensureNewName: true,
         );
         final updatedFavorites = _replaceInList(
           source: favoriteList,
+          oldName: oldName,
+          newName: trimmed,
+        );
+        final updatedHabitsByRoutine = _replaceInListMap(
+          source: habitsByRoutine,
+          oldName: oldName,
+          newName: trimmed,
+        );
+        final updatedFavoritesByRoutine = _replaceInListMap(
+          source: favoritesByRoutine,
           oldName: oldName,
           newName: trimmed,
         );
@@ -495,6 +692,8 @@ class _AtomicHabitsScreenState extends State<AtomicHabitsScreen> {
           {
             'habits': updatedHabits,
             'favorites': updatedFavorites,
+            'habits_by_routine': updatedHabitsByRoutine,
+            'favorites_by_routine': updatedFavoritesByRoutine,
           },
           SetOptions(merge: true),
         );
@@ -502,23 +701,49 @@ class _AtomicHabitsScreenState extends State<AtomicHabitsScreen> {
 
       final localTracker = _rewriteTracker(_rawTrackerData, oldName, trimmed);
       final taskMap = _parseHabitTaskMap(_flattenTrackerEntries(localTracker));
+      final updatedGlobalHabits = _replaceInList(
+        source: _globalHabits,
+        oldName: oldName,
+        newName: trimmed,
+      );
+      final updatedHabitsByRoutine = _replaceInListMap(
+        source: _habitsByRoutine,
+        oldName: oldName,
+        newName: trimmed,
+      );
+      final updatedFavoritesByRoutine = _replaceInListMap(
+        source: _favoritesByRoutine,
+        oldName: oldName,
+        newName: trimmed,
+      );
+      final updatedGlobalFavorites = _replaceInList(
+        source: _globalFavorites,
+        oldName: oldName,
+        newName: trimmed,
+      );
+      final updatedScreenHabits = _routineHabitsFor(
+        routineName: _activeRoutine,
+        globalHabits: updatedGlobalHabits,
+        habitsByRoutine: updatedHabitsByRoutine,
+      );
+      final updatedScreenFavorites = _routineFavoritesFor(
+        routineName: _activeRoutine,
+        globalFavorites: updatedGlobalFavorites,
+        screenHabits: updatedScreenHabits,
+        favoritesByRoutine: updatedFavoritesByRoutine,
+      );
 
       if (!mounted) return false;
       setState(() {
         _rawTrackerData = localTracker;
         _habitTaskMap = taskMap;
         _habitDateMap = _buildHabitDateMap(taskMap);
-        _allHabits = _replaceInList(
-          source: _allHabits,
-          oldName: oldName,
-          newName: trimmed,
-          ensureNewName: true,
-        );
-        _favorites = _replaceInList(
-          source: _favorites,
-          oldName: oldName,
-          newName: trimmed,
-        );
+        _globalHabits = updatedGlobalHabits;
+        _globalFavorites = updatedGlobalFavorites;
+        _habitsByRoutine = updatedHabitsByRoutine;
+        _favoritesByRoutine = updatedFavoritesByRoutine;
+        _screenHabits = updatedScreenHabits;
+        _favorites = updatedScreenFavorites;
         _recomputeHabitLists();
       });
 
@@ -551,16 +776,28 @@ class _AtomicHabitsScreenState extends State<AtomicHabitsScreen> {
 
         final habitList = _stringList(habitsData['habits']);
         final favoriteList = _stringList(habitsData['favorites']);
+        final habitsByRoutine = _stringListMap(habitsData['habits_by_routine']);
+        final favoritesByRoutine =
+            _stringListMap(habitsData['favorites_by_routine']);
 
         final updatedTracker = _rewriteTracker(trackerData, fromHabit, intoHabit);
         final updatedHabits = _replaceInList(
           source: habitList,
           oldName: fromHabit,
           newName: intoHabit,
-          ensureNewName: true,
         );
         final updatedFavorites = _replaceInList(
           source: favoriteList,
+          oldName: fromHabit,
+          newName: intoHabit,
+        );
+        final updatedHabitsByRoutine = _replaceInListMap(
+          source: habitsByRoutine,
+          oldName: fromHabit,
+          newName: intoHabit,
+        );
+        final updatedFavoritesByRoutine = _replaceInListMap(
+          source: favoritesByRoutine,
           oldName: fromHabit,
           newName: intoHabit,
         );
@@ -571,6 +808,8 @@ class _AtomicHabitsScreenState extends State<AtomicHabitsScreen> {
           {
             'habits': updatedHabits,
             'favorites': updatedFavorites,
+            'habits_by_routine': updatedHabitsByRoutine,
+            'favorites_by_routine': updatedFavoritesByRoutine,
           },
           SetOptions(merge: true),
         );
@@ -578,23 +817,49 @@ class _AtomicHabitsScreenState extends State<AtomicHabitsScreen> {
 
       final localTracker = _rewriteTracker(_rawTrackerData, fromHabit, intoHabit);
       final taskMap = _parseHabitTaskMap(_flattenTrackerEntries(localTracker));
+      final updatedGlobalHabits = _replaceInList(
+        source: _globalHabits,
+        oldName: fromHabit,
+        newName: intoHabit,
+      );
+      final updatedHabitsByRoutine = _replaceInListMap(
+        source: _habitsByRoutine,
+        oldName: fromHabit,
+        newName: intoHabit,
+      );
+      final updatedFavoritesByRoutine = _replaceInListMap(
+        source: _favoritesByRoutine,
+        oldName: fromHabit,
+        newName: intoHabit,
+      );
+      final updatedGlobalFavorites = _replaceInList(
+        source: _globalFavorites,
+        oldName: fromHabit,
+        newName: intoHabit,
+      );
+      final updatedScreenHabits = _routineHabitsFor(
+        routineName: _activeRoutine,
+        globalHabits: updatedGlobalHabits,
+        habitsByRoutine: updatedHabitsByRoutine,
+      );
+      final updatedScreenFavorites = _routineFavoritesFor(
+        routineName: _activeRoutine,
+        globalFavorites: updatedGlobalFavorites,
+        screenHabits: updatedScreenHabits,
+        favoritesByRoutine: updatedFavoritesByRoutine,
+      );
 
       if (!mounted) return false;
       setState(() {
         _rawTrackerData = localTracker;
         _habitTaskMap = taskMap;
         _habitDateMap = _buildHabitDateMap(taskMap);
-        _allHabits = _replaceInList(
-          source: _allHabits,
-          oldName: fromHabit,
-          newName: intoHabit,
-          ensureNewName: true,
-        );
-        _favorites = _replaceInList(
-          source: _favorites,
-          oldName: fromHabit,
-          newName: intoHabit,
-        );
+        _globalHabits = updatedGlobalHabits;
+        _globalFavorites = updatedGlobalFavorites;
+        _habitsByRoutine = updatedHabitsByRoutine;
+        _favoritesByRoutine = updatedFavoritesByRoutine;
+        _screenHabits = updatedScreenHabits;
+        _favorites = updatedScreenFavorites;
         _recomputeHabitLists();
       });
 
@@ -627,7 +892,7 @@ class _AtomicHabitsScreenState extends State<AtomicHabitsScreen> {
       MaterialPageRoute(
         builder: (_) => _MergeHabitPage(
           sourceHabit: habit,
-          habits: _combinedHabits
+          habits: _allKnownHabits()
               .where((h) => !_sameHabit(h, habit))
               .toList(growable: false),
           favorites: _favorites,
@@ -663,7 +928,7 @@ class _AtomicHabitsScreenState extends State<AtomicHabitsScreen> {
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: const Text('Atomic Habits'),
+        title: Text(_activeRoutine ?? 'Atomic Habits'),
         centerTitle: false,
         actions: [
           IconButton(
@@ -751,6 +1016,14 @@ class _AtomicHabitsScreenState extends State<AtomicHabitsScreen> {
             spacing: 8,
             runSpacing: 8,
             children: [
+              if (_isRoutineMode)
+                InfoChip(
+                  icon: _isOtherRoutineName(_activeRoutine)
+                      ? Icons.category_outlined
+                      : Icons.folder_special_rounded,
+                  label: _activeRoutine ?? 'Routine',
+                  isDark: isDark,
+                ),
               InfoChip(
                 icon: Icons.auto_awesome_rounded,
                 label: '${habits.length} habits',
@@ -815,7 +1088,7 @@ class _AtomicHabitsScreenState extends State<AtomicHabitsScreen> {
                         onOpen: () => _openHabitDetails(habit),
                         onFavorite: () => _toggleFavorite(habit),
                         onRename: () => _openRenamePage(habit),
-                        onMerge: _combinedHabits.length > 1
+                        onMerge: _allKnownHabits().length > 1
                             ? () => _openMergePage(habit)
                             : null,
                       ),
@@ -828,6 +1101,13 @@ class _AtomicHabitsScreenState extends State<AtomicHabitsScreen> {
   }
 
   Widget _buildEmpty(bool isDark) {
+    final title = _isRoutineMode ? 'No habits in this routine' : 'No habits found';
+    final subtitle = _isRoutineMode
+        ? _isOtherRoutineName(_activeRoutine)
+            ? 'There are currently no unassigned habits.'
+            : 'Add habits to "${_activeRoutine ?? 'this routine'}" from the routines screen.'
+        : 'Try a different search or add more habits to Firestore.';
+
     return Center(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 28),
@@ -835,20 +1115,22 @@ class _AtomicHabitsScreenState extends State<AtomicHabitsScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              Icons.search_off_rounded,
+              _isRoutineMode
+                  ? Icons.playlist_add_check_rounded
+                  : Icons.search_off_rounded,
               size: 56,
               color: isDark ? Colors.white38 : Colors.black26,
             ),
             const SizedBox(height: 14),
             Text(
-              'No habits found',
+              title,
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w700,
                   ),
             ),
             const SizedBox(height: 6),
             Text(
-              'Try a different search or add more habits to Firestore.',
+              subtitle,
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: Theme.of(context)
@@ -1334,7 +1616,7 @@ class _RenameHabitPageState extends State<_RenameHabitPage> {
               ),
               const SizedBox(height: 16),
               Text(
-                'This updates the habits list and every matching atomic_habit inside tracker.',
+                'This updates the habits list, every routine mapping, and every matching atomic_habit inside tracker.',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: Theme.of(context)
                           .colorScheme
@@ -1793,6 +2075,133 @@ class _MiniIconButton extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class InfoChip extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool isDark;
+
+  const InfoChip({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.isDark,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      decoration: BoxDecoration(
+        color: isDark
+            ? Colors.white.withOpacity(0.07)
+            : Colors.white.withOpacity(0.92),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(
+          color: isDark ? Colors.white10 : Colors.black.withOpacity(0.04),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            icon,
+            size: 15,
+            color: isDark ? Colors.white70 : Colors.black54,
+          ),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w700,
+              color: isDark ? Colors.white : Colors.black87,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class HabitHeatmap extends StatelessWidget {
+  final Map<DateTime, int> dates;
+  final bool isDark;
+
+  const HabitHeatmap({
+    super.key,
+    required this.dates,
+    required this.isDark,
+  });
+
+  DateTime _dateOnly(DateTime date) =>
+      DateTime(date.year, date.month, date.day);
+
+  @override
+  Widget build(BuildContext context) {
+    final today = _dateOnly(DateTime.now());
+    final dayList = List<DateTime>.generate(
+      28,
+      (index) => today.subtract(Duration(days: 27 - index)),
+    );
+
+    final normalized = <DateTime, int>{};
+    for (final entry in dates.entries) {
+      normalized[_dateOnly(entry.key)] = entry.value;
+    }
+
+    var maxCount = 0;
+    for (final count in normalized.values) {
+      if (count > maxCount) maxCount = count;
+    }
+
+    Color cellColor(int count) {
+      if (count <= 0) {
+        return isDark ? Colors.white10 : Colors.black12;
+      }
+
+      final ratio = maxCount == 0 ? 0.4 : (count / maxCount);
+      final opacity = 0.22 + (ratio * 0.72);
+      return Theme.of(context).colorScheme.primary.withOpacity(
+            opacity.clamp(0.22, 0.94),
+          );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: dayList.map((day) {
+            final count = normalized[day] ?? 0;
+
+            return Tooltip(
+              message: '${day.day}/${day.month}: $count',
+              child: Container(
+                width: 18,
+                height: 18,
+                decoration: BoxDecoration(
+                  color: cellColor(count),
+                  borderRadius: BorderRadius.circular(5),
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+        const SizedBox(height: 10),
+        Text(
+          'Last 28 days',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: isDark ? Colors.white60 : Colors.black54,
+          ),
+        ),
+      ],
     );
   }
 }

@@ -7,6 +7,7 @@ import 'shared/neon_ribbon_background.dart';
 import 'shared/theme.dart';
 import 'insights_screen.dart';
 import 'atomic_habits_screen.dart';
+import 'routines_screen.dart';
 
 // Main app entry point
 void main() async {
@@ -54,12 +55,12 @@ class WorkTrackerScreen extends StatelessWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.auto_awesome_outlined),
-            tooltip: 'Atomic Habits',
+            tooltip: 'Routines',
             onPressed: () {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => const AtomicHabitsScreen(),
+                  builder: (context) => const RoutinesScreen(),
                 ),
               );
             },
@@ -369,7 +370,7 @@ class WorkTrackerScreen extends StatelessWidget {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => const AtomicHabitsScreen(),
+                        builder: (_) => const RoutinesScreen(),
                       ),
                     );
                   },
