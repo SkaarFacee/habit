@@ -2,7 +2,7 @@ import os
 import re
 import json
 import copy
-from typing import Dict, Any, Tuple, List, Optional
+from typing import Dict, Any, Tuple, List, Optional, Iterable
 
 from groq import Groq
 from config.constants import ATOMIC_HABITS
@@ -12,7 +12,7 @@ ATOMIC_HABITS_FILE = ATOMIC_HABITS
 
 # ----------------- Helpers -----------------
 def normalize_key(text: str) -> str:
-    text = text.strip().lower()
+    text = str(text).strip().lower()
     text = re.sub(r"[^a-z0-9\s]+", "", text)
     text = re.sub(r"\s+", " ", text)
     return text
@@ -30,37 +30,110 @@ def save_json(path: str, data: Any) -> None:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
 
-def load_habits_list(path: str) -> List[str]:
-    data = load_json(path, default=[])
+def load_habits_data(path: str) -> Dict[str, List[str]]:
+    """
+    Supports:
+    {
+        "habits": [...],
+        "favorites": [...]
+    }
+
+    Also tolerates older plain-list format for backward compatibility.
+    """
+    data = load_json(path, default={"habits": [], "favorites": []})
+
     if isinstance(data, dict):
-        return [str(x).strip() for x in data['habits'] if str(x).strip()]
-    return []
+        habits = [str(x).strip() for x in data.get("habits", []) if str(x).strip()]
+        favorites = [str(x).strip() for x in data.get("favorites", []) if str(x).strip()]
+        return {
+            "habits": habits,
+            "favorites": favorites,
+        }
+
+    if isinstance(data, list):
+        habits = [str(x).strip() for x in data if str(x).strip()]
+        return {
+            "habits": habits,
+            "favorites": [],
+        }
+
+    return {
+        "habits": [],
+        "favorites": [],
+    }
 
 
-def save_habits_list(path: str, habits: List[str]) -> None:
-    deduped = []
+def save_habits_data(path: str, habits: List[str], favorites: Optional[List[str]] = None) -> None:
+    """
+    Saves while preserving the JSON structure:
+    {
+        "habits": [...],
+        "favorites": [...]
+    }
+    """
+    deduped_habits = []
     seen = set()
     for habit in habits:
         clean = str(habit).strip()
         key = normalize_key(clean)
         if clean and key not in seen:
-            deduped.append(clean)
+            deduped_habits.append(clean)
             seen.add(key)
-    save_json(path, deduped)
+
+    deduped_favorites = []
+    seen_fav = set()
+    for fav in (favorites or []):
+        clean = str(fav).strip()
+        key = normalize_key(clean)
+        if clean and key not in seen_fav:
+            deduped_favorites.append(clean)
+            seen_fav.add(key)
+
+    save_json(
+        path,
+        {
+            "habits": deduped_habits,
+            "favorites": deduped_favorites,
+        },
+    )
+
 
 def find_existing_habit_case_insensitive(habits: List[str], candidate: str) -> Optional[str]:
     candidate_key = normalize_key(candidate)
     for habit in habits:
         if normalize_key(habit) == candidate_key:
             return habit
-   
+    return None
+
+
+def clean_notes(notes: Any) -> str:
+    text = str(notes or "").strip()
+    if normalize_key(text) in {"", "none", "null", "na", "n a", "nil"}:
+        return ""
+    return text
+
+
+def iter_task_lists(payload: Dict[str, Any]) -> Iterable[Tuple[str, List[Dict[str, Any]]]]:
+    """
+    Supports only this payload shape:
+    {
+      "Daily Goals": [ {...}, {...} ],
+      "Another List": [ {...} ]
+    }
+    """
+    for list_name, tasks in payload.items():
+        if isinstance(list_name, str) and isinstance(tasks, list):
+            yield list_name, tasks
+
 
 # ----------------- LLM -----------------
 def llm_match_or_create_habit(
     client: Groq,
     model: str,
     title: str,
+    notes: str,
     habits: List[str],
+    favorites: List[str],
 ) -> Dict[str, str]:
     """
     Returns STRICT JSON:
@@ -70,20 +143,28 @@ def llm_match_or_create_habit(
     }
     """
     system = (
-        "You assign a task title to the best matching atomic habit from a provided list.\n"
+        "You assign a task to the best matching atomic habit from a provided list.\n"
         "Rules:\n"
+        "- Use BOTH title and notes.\n"
+        "- If notes clearly suggest one of the existing habits, choose that exact habit.\n"
+        "- Prefer an existing habit over creating a new one.\n"
+        "- Favorites are slightly preferred when they are a good fit, but do not force them.\n"
         "- If one existing habit clearly fits, return it exactly as written.\n"
-        "- If none fit, create a new atomic habit.\n"
-        "- A new atomic habit must be concrete, reusable, start with a verb, and be <= 6 words.\n"
-        "- Remove dates, places, and one-off details.\n"
+        "- Only create a new atomic habit if none of the existing habits fit.\n"
+        "- A new atomic habit must be concrete, reusable, start with a verb if possible, and be <= 6 words.\n"
+        "- Remove dates, places, quantities, and one-off details.\n"
+        "- Never invent a habit if an existing one is a reasonable fit.\n"
         "Return STRICT JSON only."
     )
 
-    habits_text = json.dumps(habits, ensure_ascii=False)
-
     user = (
-        f"Task title: {title}\n\n"
-        f"Existing habits:\n{habits_text}\n\n"
+        f"Task title: {title}\n"
+        f"Task notes: {notes or 'None'}\n\n"
+        f"Existing habits:\n{json.dumps(habits, ensure_ascii=False)}\n\n"
+        f"Favorite habits:\n{json.dumps(favorites, ensure_ascii=False)}\n\n"
+        "Important:\n"
+        "- If the notes suggest one of the existing habits, choose that exact habit.\n"
+        "- Return the habit exactly as written from the existing list when matched.\n\n"
         "Output schema:\n"
         '{ "matched": true, "atomic_habit": "one of the existing habits exactly" }\n'
         "or\n"
@@ -97,7 +178,7 @@ def llm_match_or_create_habit(
             {"role": "user", "content": user},
         ],
         response_format={"type": "json_object"},
-        temperature=0.2,
+        temperature=0.1,
     )
 
     data = json.loads(resp.choices[0].message.content)
@@ -124,73 +205,60 @@ def update_tracker(payload: Dict[str, Any], model: str = DEFAULT_MODEL) -> Tuple
     # Work on a copy so we return a newly modified payload JSON
     new_payload = copy.deepcopy(payload)
 
-    # Load habits and make sure we return a brand-new list object
-    habits_list = list(load_habits_list(ATOMIC_HABITS_FILE))
+    # Load habits data
+    habits_data = load_habits_data(ATOMIC_HABITS_FILE)
+    habits_list = list(habits_data["habits"])
+    favorites = list(habits_data["favorites"])
 
-    tracker = new_payload.get("Tracker", {})
-    list_names = new_payload.get("lists", [])
-
-    if not isinstance(tracker, dict):
-        raise ValueError("payload['Tracker'] must be a dictionary")
-
-    if not isinstance(list_names, list):
-        raise ValueError("payload['lists'] must be a list")
-
-    # IMPORTANT:
-    # list names are case-sensitive, so use them exactly as they appear
-    # in payload["lists"] without normalizing/changing case.
-    for list_name in list_names:
-        if not isinstance(list_name, str):
-            continue
-
-        dated_tasks = tracker.get(list_name)
-        if not isinstance(dated_tasks, dict):
-            continue
-
-        for date_key, tasks in dated_tasks.items():
-            if not isinstance(tasks, list):
+    for _, tasks in iter_task_lists(new_payload):
+        for t in tasks:
+            if not isinstance(t, dict):
                 continue
 
-            for t in tasks:
-                if not isinstance(t, dict):
-                    continue
+            title = str(t.get("title", "")).strip()
+            notes = clean_notes(t.get("notes", ""))
 
-                title = str(t.get("title", "")).strip()
-                if not title:
-                    continue
+            if not title:
+                continue
 
-                existing_atomic = str(t.get("atomic_habit", "")).strip()
-                if existing_atomic:
-                    matched_habit = find_existing_habit_case_insensitive(habits_list, existing_atomic)
-                    chosen_habit = matched_habit if matched_habit else existing_atomic
+            # Safe fallback in case atomic_habit appears in the future
+            existing_atomic = str(t.get("atomic_habit", "")).strip()
 
-                    if not matched_habit:
-                        habits_list.append(chosen_habit)
+            if existing_atomic:
+                matched_habit = find_existing_habit_case_insensitive(habits_list, existing_atomic)
+                chosen_habit = matched_habit if matched_habit else existing_atomic
+
+                if not matched_habit:
+                    habits_list.append(chosen_habit)
+            else:
+                result = llm_match_or_create_habit(
+                    client=client,
+                    model=model,
+                    title=title,
+                    notes=notes,
+                    habits=habits_list,
+                    favorites=favorites,
+                )
+
+                suggested_habit = result["atomic_habit"]
+                matched_habit = find_existing_habit_case_insensitive(habits_list, suggested_habit)
+
+                if matched_habit:
+                    chosen_habit = matched_habit
                 else:
-                    result = llm_match_or_create_habit(
-                        client=client,
-                        model=model,
-                        title=title,
-                        habits=habits_list,
-                    )
+                    chosen_habit = suggested_habit
+                    habits_list.append(chosen_habit)
 
-                    suggested_habit = result["atomic_habit"]
-                    matched_habit = find_existing_habit_case_insensitive(habits_list, suggested_habit)
+            t["atomic_habit"] = chosen_habit
 
-                    if matched_habit:
-                        chosen_habit = matched_habit
-                    else:
-                        chosen_habit = suggested_habit
-                        habits_list.append(chosen_habit)
+    # Uncomment this if you want to persist new habits to the file
+    # save_habits_data(ATOMIC_HABITS_FILE, habits_list, favorites)
 
-                t["atomic_habit"] = chosen_habit
-
-    # save_habits_list(ATOMIC_HABITS_FILE, habits_list)
     return new_payload, list(habits_list)
 
 
-def main(payload):
+def main(payload: Dict[str, Any]) -> Tuple[Dict[str, Any], List[str]]:
     updated_payload, updated_habits = update_tracker(payload)
-    print("This is the output of the update habits ")
+    print("This is the output of the updated habits:")
     print(updated_habits)
     return updated_payload, updated_habits
