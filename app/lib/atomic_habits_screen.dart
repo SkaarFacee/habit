@@ -113,8 +113,21 @@ class _AtomicHabitsScreenState extends State<AtomicHabitsScreen> {
 
         final globalHabits = _stringList(raw['habits']);
         final globalFavorites = _stringList(raw['favorites']);
-        final habitsByRoutine = _stringListMap(raw['habits_by_routine']);
-        final favoritesByRoutine = _stringListMap(raw['favorites_by_routine']);
+
+        // FIX:
+        // This reads BOTH:
+        // 1) nested map format:
+        //    habits_by_routine: { Productivity: [...] }
+        // 2) dotted legacy/top-level format:
+        //    habits_by_routine.Productivity: [...]
+        final habitsByRoutine = _readRoutineListMapFromRaw(
+          raw: raw,
+          rootField: 'habits_by_routine',
+        );
+        final favoritesByRoutine = _readRoutineListMapFromRaw(
+          raw: raw,
+          rootField: 'favorites_by_routine',
+        );
 
         final routineName = _activeRoutine;
         final screenHabits = _routineHabitsFor(
@@ -209,6 +222,52 @@ class _AtomicHabitsScreenState extends State<AtomicHabitsScreen> {
     return out;
   }
 
+  /// Reads routine maps from Firestore even if the document is in a mixed format.
+  ///
+  /// Supported shapes:
+  /// 1. Nested:
+  ///    habits_by_routine: { Productivity: ['A', 'B'] }
+  ///
+  /// 2. Dotted / legacy:
+  ///    habits_by_routine.Productivity: ['A', 'B']
+  ///
+  /// If both exist for the same routine, nested data wins.
+  Map<String, List<String>> _readRoutineListMapFromRaw({
+    required Map<String, dynamic> raw,
+    required String rootField,
+  }) {
+    final out = <String, List<String>>{};
+
+    // First read the nested map if it exists.
+    final nested = raw[rootField];
+    if (nested is Map) {
+      nested.forEach((key, value) {
+        final routine = key.toString().trim();
+        if (routine.isEmpty) return;
+        out[routine] = _stringList(value);
+      });
+    }
+
+    // Then read dotted top-level fields only for routines not already present.
+    final prefix = '$rootField.';
+    raw.forEach((key, value) {
+      if (!key.startsWith(prefix)) return;
+
+      final routine = key.substring(prefix.length).trim();
+      if (routine.isEmpty) return;
+
+      final existingKey = _matchingRoutineKey(out, routine);
+      if (existingKey != null) {
+        // Nested map already exists for this routine, so prefer that.
+        return;
+      }
+
+      out[routine] = _stringList(value);
+    });
+
+    return out;
+  }
+
   List<String> _dedupeStrings(Iterable<String> values) {
     final seen = <String>{};
     final out = <String>[];
@@ -267,7 +326,9 @@ class _AtomicHabitsScreenState extends State<AtomicHabitsScreen> {
     }
 
     final key = _matchingRoutineKey(habitsByRoutine, routineName);
-    return List<String>.from(key == null ? const [] : habitsByRoutine[key] ?? const []);
+    return List<String>.from(
+      key == null ? const [] : habitsByRoutine[key] ?? const [],
+    );
   }
 
   List<String> _routineFavoritesFor({
@@ -281,8 +342,9 @@ class _AtomicHabitsScreenState extends State<AtomicHabitsScreen> {
     }
 
     final key = _matchingRoutineKey(favoritesByRoutine, routineName);
-    final routineFavorites =
-        List<String>.from(key == null ? const [] : favoritesByRoutine[key] ?? const []);
+    final routineFavorites = List<String>.from(
+      key == null ? const [] : favoritesByRoutine[key] ?? const [],
+    );
 
     return routineFavorites
         .where((favorite) => _containsHabit(screenHabits, favorite))
@@ -565,7 +627,10 @@ class _AtomicHabitsScreenState extends State<AtomicHabitsScreen> {
         final routineName = _activeRoutine;
 
         if (routineName != null) {
-          final favoritesByRoutine = _stringListMap(raw['favorites_by_routine']);
+          final favoritesByRoutine = _readRoutineListMapFromRaw(
+            raw: raw,
+            rootField: 'favorites_by_routine',
+          );
           final routineKey =
               _matchingRoutineKey(favoritesByRoutine, routineName) ?? routineName;
           final favorites =
@@ -660,9 +725,14 @@ class _AtomicHabitsScreenState extends State<AtomicHabitsScreen> {
 
         final habitList = _stringList(habitsData['habits']);
         final favoriteList = _stringList(habitsData['favorites']);
-        final habitsByRoutine = _stringListMap(habitsData['habits_by_routine']);
-        final favoritesByRoutine =
-            _stringListMap(habitsData['favorites_by_routine']);
+        final habitsByRoutine = _readRoutineListMapFromRaw(
+          raw: habitsData,
+          rootField: 'habits_by_routine',
+        );
+        final favoritesByRoutine = _readRoutineListMapFromRaw(
+          raw: habitsData,
+          rootField: 'favorites_by_routine',
+        );
 
         final updatedTracker = _rewriteTracker(trackerData, oldName, trimmed);
         final updatedHabits = _replaceInList(
@@ -776,9 +846,14 @@ class _AtomicHabitsScreenState extends State<AtomicHabitsScreen> {
 
         final habitList = _stringList(habitsData['habits']);
         final favoriteList = _stringList(habitsData['favorites']);
-        final habitsByRoutine = _stringListMap(habitsData['habits_by_routine']);
-        final favoritesByRoutine =
-            _stringListMap(habitsData['favorites_by_routine']);
+        final habitsByRoutine = _readRoutineListMapFromRaw(
+          raw: habitsData,
+          rootField: 'habits_by_routine',
+        );
+        final favoritesByRoutine = _readRoutineListMapFromRaw(
+          raw: habitsData,
+          rootField: 'favorites_by_routine',
+        );
 
         final updatedTracker = _rewriteTracker(trackerData, fromHabit, intoHabit);
         final updatedHabits = _replaceInList(

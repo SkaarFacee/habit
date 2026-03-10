@@ -96,7 +96,6 @@ class TrackerProvider:
                 flag=False
                 tasks = service.tasks().list(tasklist=tasklist['id'],showHidden=True).execute()
                 task_items = tasks.get('items', [])
-                print(task_items)
                 tasks_info[tasklist['title'].strip()]=self.parallel_process_tasks(task_items,provider,model)
 
         if flag: 
@@ -108,6 +107,7 @@ class TrackerProvider:
         return {
             'title': task.get('title', 'No Title'),
             'status': task.get('status', 'In-progess'),
+            'notes': task.get ('notes','None'),
             'completed': datetime.strptime(task.get('completed', ''), "%Y-%m-%dT%H:%M:%S.%fZ").strftime("%d-%m-%Y") if task.get('completed') else 'Not complete',
             'llm_output': provider.get_category(task.get('title', 'No Title'), model),
         }

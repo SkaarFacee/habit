@@ -259,6 +259,4 @@ def update_tracker(payload: Dict[str, Any], model: str = DEFAULT_MODEL) -> Tuple
 
 def main(payload: Dict[str, Any]) -> Tuple[Dict[str, Any], List[str]]:
     updated_payload, updated_habits = update_tracker(payload)
-    print("This is the output of the updated habits:")
-    print(updated_habits)
     return updated_payload, updated_habits

@@ -31,7 +31,8 @@ class SaveUtils:
                 entry = {
                     'title': x['title'],
                     'category': x['llm_output']['category'],
-                    'difficulty': x['llm_output']['diificulty']
+                    'difficulty': x['llm_output']['diificulty'],
+                    'atomic_habit':x['atomic_habit']
                 }
                 grouped_by_date.setdefault(date, []).append(entry)
 
@@ -50,6 +51,7 @@ class SaveUtils:
             for future in as_completed(futures):
                 tracker_entries.append(future.result())
         
+        print(tracker_entries)
         self.create_json(tracker_entries)
         
 
