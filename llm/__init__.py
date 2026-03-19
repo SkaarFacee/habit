@@ -1,6 +1,7 @@
 from llm.Gemini.provider import GeminiProvider
 from llm.OpenAI.provider import OpenAIProvider
-from config.constants import GEMINI_API_LABEL,OPENAI_API_LABEL,GEMINI_MODEL_LABEL,OPENAI_MODEL_LABEL
+from llm.GroqCloud.provider import GroqCloudProvider
+from config.constants import GEMINI_API_LABEL,OPENAI_API_LABEL,GEMINI_MODEL_LABEL,OPENAI_MODEL_LABEL,GROQ_API_LABEL,GROQ_MODEL_LABEL
 
 class GetProvider:
     @staticmethod
@@ -9,5 +10,7 @@ class GetProvider:
             return (GeminiProvider(env.get(GEMINI_API_LABEL)),env.get(GEMINI_MODEL_LABEL))
         elif model ==OPENAI_MODEL_LABEL:
             return (OpenAIProvider(env.get(OPENAI_API_LABEL)),OPENAI_MODEL_LABEL)
+        elif model == GROQ_MODEL_LABEL:
+            return (GroqCloudProvider(env.get(GROQ_API_LABEL)),env.get(GROQ_MODEL_LABEL))
         else:
             raise ValueError(f"Unsupported model: {model}")
