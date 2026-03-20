@@ -2,10 +2,12 @@ import os
 import re
 import json
 import copy
+from pathlib import Path
 from typing import Dict, Any, Tuple, List, Optional, Iterable
+from dotenv import dotenv_values
 
 from groq import Groq
-from config.constants import ATOMIC_HABITS
+from config.constants import ATOMIC_HABITS, CONFIG_FILE
 
 DEFAULT_MODEL = "openai/gpt-oss-120b"
 ATOMIC_HABITS_FILE = ATOMIC_HABITS
@@ -196,7 +198,9 @@ def llm_match_or_create_habit(
 
 # ----------------- Pipeline -----------------
 def update_tracker(payload: Dict[str, Any], model: str = DEFAULT_MODEL) -> Tuple[Dict[str, Any], List[str]]:
-    api_key = os.getenv("GROQ_API_KEY")
+    # Check .habit file first, then fall back to environment
+    env = dotenv_values(Path.home() / CONFIG_FILE)
+    api_key = env.get("GROQ_API_KEY") or os.getenv("GROQ_API_KEY")
     if not api_key:
         raise RuntimeError("Missing GROQ_API_KEY environment variable")
 
