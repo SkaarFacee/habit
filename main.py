@@ -18,7 +18,6 @@ from views.tasks_view import TaskView
 from views.setup_view import SetupView
 from utils import SaveUtils,Firebase
 import json
-
 if __name__ == '__main__':
     firebase_obj=Firebase()
     tracker_data = firebase_obj.get()
@@ -67,6 +66,8 @@ if __name__ == '__main__':
         titles=tasks_obj.read_local_list()
         response=tasks_obj.list_google_tasks(titles,provider,model)  
         response,habits_tracker=main(response)
+        print(response)
+        print(habits_tracker)
         save_utils.save(response,firebase_obj)  
         save_utils.save_atomic(firebase_obj,habits_tracker)
         for t in response.keys():
