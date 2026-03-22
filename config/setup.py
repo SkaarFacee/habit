@@ -3,13 +3,14 @@ from pathlib import Path
 from dotenv import dotenv_values, set_key
 
 from config import config
-from config.constants import CONFIG_FILE,GEMINI_MODEL_LABEL,OPENAI_MODEL_LABEL,LIST_TRACKER
+from config.constants import CONFIG_FILE,GEMINI_MODEL_LABEL,OPENAI_MODEL_LABEL,GROQ_MODEL_LABEL,LIST_TRACKER
 from config.question_model import SelectProviderQuestions, SetupQuestions
 from llm.Gemini.setup import GeminiQuestions
 from llm.OpenAI.setup import OpenAIQuestions
+from llm.GroqCloud.setup import GroqCloudQuestions
 from tasks.getTasks import TrackerProvider
 from views.setup_view import SetupView
-class Setup: 
+class Setup:
     def __init__(self):
         self.questions=[
             SetupQuestions(
@@ -23,6 +24,10 @@ class Setup:
                     SelectProviderQuestions(
                         label=OPENAI_MODEL_LABEL,
                         follow_up_questions=OpenAIQuestions.get_questions()
+                    ),
+                    SelectProviderQuestions(
+                        label=GROQ_MODEL_LABEL,
+                        follow_up_questions=GroqCloudQuestions.get_questions()
                     )
                 ])]
         # Runs if config and tracker is not there 
