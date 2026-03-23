@@ -16,3 +16,8 @@ class SetupQuestions(BaseModel):
     label : str
     question_prompt: str
     options: List[SelectProviderQuestions]
+
+class SetupGroqQuestions(BaseModel):
+    label: str 
+    question: str
+    options : List[str]
