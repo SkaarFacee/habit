@@ -49,7 +49,7 @@ jobs:
           echo "export GEMINI_MODEL='gemini-2.0-flash'" >> ~/.habit
           echo "export GROQ_API_KEY='${{ secrets.GROQ_API_KEY }}'" 
           echo "export GROQ_API_KEY='${{ secrets.GROQ_API_KEY }}'" >> ~/.habit
-          echo "export GROQ_MODEL='qwen/qwen3-32b'" >> ~/.habit
+          echo "export GROQ_MODEL='openai/gpt-oss-120b'" >> ~/.habit
 
 
       - name: Run task categorization
