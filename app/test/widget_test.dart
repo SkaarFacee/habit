@@ -5,8 +5,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:TrackIt/insights_screen.dart';
 import 'package:TrackIt/main.dart';
 import 'package:TrackIt/services/stats.dart';
+import 'package:TrackIt/services/widget_cards/widget_card_large.dart';
+import 'package:TrackIt/services/widget_cards/widget_card_small.dart';
 import 'package:TrackIt/services/widget_heatmap_card.dart';
 import 'package:TrackIt/shared/chunked_contribution_grid.dart';
 
@@ -99,8 +102,9 @@ void main() {
   });
 
   group('ContributionGraph', () {
-    testWidgets('renders a small sample map without errors',
-        (WidgetTester tester) async {
+    testWidgets('renders a small sample map without errors', (
+      WidgetTester tester,
+    ) async {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
@@ -129,8 +133,9 @@ void main() {
       expect(find.byType(ContributionGraph), findsOneWidget);
     });
 
-    testWidgets('navigates to the older 6-month page without overflow',
-        (WidgetTester tester) async {
+    testWidgets('navigates to the older 6-month page without overflow', (
+      WidgetTester tester,
+    ) async {
       await tester.binding.setSurfaceSize(const Size(400, 900));
       addTearDown(() => tester.binding.setSurfaceSize(null));
 
@@ -175,8 +180,9 @@ void main() {
       await tester.pump();
     }
 
-    testWidgets('collapses gracefully inside a zero-width container',
-        (WidgetTester tester) async {
+    testWidgets('collapses gracefully inside a zero-width container', (
+      WidgetTester tester,
+    ) async {
       await pumpGrid(tester, 0);
       expect(tester.takeException(), isNull);
       expect(find.byType(ChunkedContributionGrid), findsOneWidget);
@@ -186,14 +192,16 @@ void main() {
       );
     });
 
-    testWidgets('collapses gracefully inside an ultra-narrow container',
-        (WidgetTester tester) async {
+    testWidgets('collapses gracefully inside an ultra-narrow container', (
+      WidgetTester tester,
+    ) async {
       await pumpGrid(tester, 30);
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('renders without overflow in a small-but-valid container',
-        (WidgetTester tester) async {
+    testWidgets('renders without overflow in a small-but-valid container', (
+      WidgetTester tester,
+    ) async {
       await pumpGrid(tester, 150);
       expect(tester.takeException(), isNull);
       // Nav bar is present: the grid itself rendered.
@@ -202,8 +210,9 @@ void main() {
   });
 
   group('WidgetHeatmapCard', () {
-    testWidgets('renders streak, today count and grid without errors',
-        (WidgetTester tester) async {
+    testWidgets('renders streak, today count and grid without errors', (
+      WidgetTester tester,
+    ) async {
       final tracker = <String, dynamic>{
         'Work': <String, dynamic>{
           '09-08-2026': [
@@ -240,6 +249,140 @@ void main() {
     });
   });
 
+  group('WidgetCardSmall', () {
+    testWidgets('renders streak, today and 14 dots without errors', (
+      WidgetTester tester,
+    ) async {
+      final tracker = <String, dynamic>{
+        'Work': <String, dynamic>{
+          '10-08-2026': [
+            {'title': 'a'},
+          ],
+        },
+      };
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 110,
+              height: 110,
+              child: WidgetCardSmall(
+                counts: dailyTaskCounts(tracker),
+                stats: computeAppStats(tracker, now: DateTime(2026, 8, 10)),
+                isDark: true,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+      expect(find.text('TODAY'), findsOneWidget);
+    });
+  });
+
+  group('WidgetCardLarge', () {
+    testWidgets('renders header stats, heatmap and bars without errors', (
+      WidgetTester tester,
+    ) async {
+      final tracker = <String, dynamic>{
+        'Work': <String, dynamic>{
+          '09-08-2026': [
+            {'title': 'a'},
+          ],
+          '10-08-2026': [
+            {'title': 'b'},
+          ],
+        },
+      };
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 320,
+              height: 320,
+              child: WidgetCardLarge(
+                counts: dailyTaskCounts(tracker),
+                stats: computeAppStats(tracker, now: DateTime(2026, 8, 10)),
+                isDark: false,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+      expect(find.text('BEST STREAK'), findsOneWidget);
+      expect(find.text('LAST 7 DAYS'), findsOneWidget);
+    });
+  });
+
+  group('InsightsScreen', () {
+    testWidgets('renders hero stats, charts and segments', (
+      WidgetTester tester,
+    ) async {
+      // Use data anchored to the real today so the week range is non-empty.
+      final today = DateTime.now();
+      final dateStr =
+          '${today.day.toString().padLeft(2, '0')}-'
+          '${today.month.toString().padLeft(2, '0')}-'
+          '${today.year}';
+      final liveTracker = <String, dynamic>{
+        'Work': <String, dynamic>{
+          dateStr: [
+            {'title': 'Read', 'category': 'Work', 'difficulty': 'EASY'},
+          ],
+        },
+      };
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: SizedBox(
+                height: 900,
+                child: InsightsScreen(trackerData: liveTracker),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      // Long enough for every staggered entrance timer to fire.
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(tester.takeException(), isNull);
+      expect(find.text('Week'), findsOneWidget);
+      expect(find.text('Month'), findsOneWidget);
+      expect(find.text('All'), findsOneWidget);
+      expect(find.text('CATEGORY MIX'), findsOneWidget);
+      expect(find.text('ACTIVITY'), findsOneWidget);
+      expect(find.text('TOP TASKS'), findsOneWidget);
+      expect(find.text('Read'), findsOneWidget);
+    });
+
+    testWidgets('shows the empty state for a fresh tracker', (
+      WidgetTester tester,
+    ) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: SizedBox(height: 900, child: InsightsScreen(trackerData: {})),
+          ),
+        ),
+      );
+
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(tester.takeException(), isNull);
+      expect(find.text('No activity yet'), findsOneWidget);
+    });
+  });
+
   group('AddWorkDialog', () {
     testWidgets('builds for a fresh tracker', (WidgetTester tester) async {
       await tester.pumpWidget(
@@ -254,13 +397,12 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('builds with existing lists preselected',
-        (WidgetTester tester) async {
+    testWidgets('builds with existing lists preselected', (
+      WidgetTester tester,
+    ) async {
       await tester.pumpWidget(
         const MaterialApp(
-          home: Scaffold(
-            body: AddWorkDialog(existingLists: <String>['Work']),
-          ),
+          home: Scaffold(body: AddWorkDialog(existingLists: <String>['Work'])),
         ),
       );
 
