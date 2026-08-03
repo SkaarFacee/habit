@@ -17,6 +17,7 @@ class AppTheme {
     ),
     useMaterial3: true,
     fontFamily: 'Inter',
+    pageTransitionsTheme: Motion.pageTransitionsTheme,
     appBarTheme: const AppBarTheme(
       backgroundColor: Colors.transparent, // Make AppBar transparent
       elevation: 0,
@@ -31,8 +32,16 @@ class AppTheme {
     textTheme: const TextTheme(
       bodyLarge: TextStyle(fontFamily: 'Inter', color: Colors.black87),
       bodyMedium: TextStyle(fontFamily: 'Inter', color: Colors.black54),
-      titleLarge: TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.bold, color: Colors.black),
-      headlineSmall: TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w600, color: Colors.black),
+      titleLarge: TextStyle(
+        fontFamily: 'Inter',
+        fontWeight: FontWeight.bold,
+        color: Colors.black,
+      ),
+      headlineSmall: TextStyle(
+        fontFamily: 'Inter',
+        fontWeight: FontWeight.w600,
+        color: Colors.black,
+      ),
     ),
   );
 
@@ -51,6 +60,7 @@ class AppTheme {
     ),
     useMaterial3: true,
     fontFamily: 'Inter',
+    pageTransitionsTheme: Motion.pageTransitionsTheme,
     appBarTheme: const AppBarTheme(
       backgroundColor: Colors.transparent, // Make AppBar transparent
       elevation: 0,
@@ -66,9 +76,33 @@ class AppTheme {
       bodyLarge: TextStyle(fontFamily: 'Inter', color: Colors.white),
       bodyMedium: TextStyle(fontFamily: 'Inter', color: Colors.white70),
       titleLarge: TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.bold),
-      headlineSmall: TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w600),
+      headlineSmall: TextStyle(
+        fontFamily: 'Inter',
+        fontWeight: FontWeight.w600,
+      ),
     ),
   );
 }
 
 final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier(ThemeMode.dark);
+
+// --- Motion system ---
+/// Centralized durations/curves so every screen shares one motion language.
+class Motion {
+  const Motion._();
+
+  static const Duration fast = Duration(milliseconds: 150);
+  static const Duration standard = Duration(milliseconds: 300);
+  static const Duration emphasized = Duration(milliseconds: 500);
+
+  static const Curve standardCurve = Curves.easeOutCubic;
+  static const Curve emphasizedCurve = Curves.easeInOutCubic;
+
+  static const PageTransitionsTheme pageTransitionsTheme = PageTransitionsTheme(
+    builders: {
+      TargetPlatform.android: ZoomPageTransitionsBuilder(),
+      TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+      TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
+    },
+  );
+}
