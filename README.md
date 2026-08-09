@@ -1,4 +1,4 @@
-# 🚀 Habit Tracker & AI-Powered Task Categorizer
+# 🚀 Habit Tracker & AI-Powered Task Categorizer.
 
 This project helps you track and categorize your Google Tasks using AI. It started as a command-line tool and now includes a **Flutter-based mobile app** to visualize your productivity and habits on the go. It integrates with Google Tasks to fetch your daily activities, leverages Large Language Models (LLMs) to automatically categorize them, and provides a visual heatmap to help you understand your productivity and habits over time.
 
