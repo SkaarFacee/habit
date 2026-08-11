@@ -31,7 +31,7 @@ class AppStats {
 
 /// Parses `dd-MM-yyyy` (leading zeros allowed) into a date-only `DateTime`.
 /// Returns `null` for malformed strings.
-DateTime? _parseDayOnly(String dateStr) {
+DateTime? parseDayOnly(String dateStr) {
   final parts = dateStr.split('-');
   if (parts.length != 3) return null;
   try {
@@ -56,7 +56,7 @@ Map<DateTime, int> dailyTaskCounts(Map<String, dynamic> tracker) {
     if (listData is! Map<String, dynamic>) return;
     listData.forEach((dateStr, activities) {
       if (activities is! List || activities.isEmpty) return;
-      final date = _parseDayOnly(dateStr);
+      final date = parseDayOnly(dateStr);
       if (date == null) return;
 
       final day = DateTime(date.year, date.month, date.day);
@@ -88,7 +88,7 @@ AppStats computeAppStats(Map<String, dynamic> tracker, {DateTime? now}) {
     if (listData is! Map<String, dynamic>) return;
     listData.forEach((dateStr, activities) {
       if (activities is! List || activities.isEmpty) return;
-      final date = _parseDayOnly(dateStr);
+      final date = parseDayOnly(dateStr);
       if (date == null) return;
 
       workDays.add(date);
