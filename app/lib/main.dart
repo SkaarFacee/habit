@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'shared/chunked_contribution_grid.dart';
 import 'shared/neon_ribbon_background.dart';
+import 'shared/pressable_scale.dart';
 import 'shared/theme.dart';
 import 'services/stats.dart';
 import 'services/tracker_cache.dart';
@@ -23,6 +24,12 @@ void main() async {
   await Firebase.initializeApp();
   runApp(const MyApp());
 }
+
+/// Latest inner tracker map (`{list: {date: [entries]}}`), shared with the
+/// Insights tab so both tabs read one stream.
+final ValueNotifier<Map<String, dynamic>> trackerDataNotifier = ValueNotifier(
+  const {},
+);
 
 // Root application widget
 class MyApp extends StatelessWidget {
@@ -39,26 +46,174 @@ class MyApp extends StatelessWidget {
           theme: AppTheme.lightTheme,
           darkTheme: AppTheme.darkTheme,
           themeMode: mode,
-          home: const WorkTrackerScreen(),
+          home: const HomeShell(),
         );
       },
     );
   }
 }
 
-// Main screen for tracking work
-class WorkTrackerScreen extends StatefulWidget {
-  const WorkTrackerScreen({super.key});
+/// Bottom-navigation shell hosting Dashboard, Insights and Routines in a
+/// state-preserving stack with cross-fade page transitions.
+class HomeShell extends StatefulWidget {
+  const HomeShell({super.key});
 
   @override
-  State<WorkTrackerScreen> createState() => _WorkTrackerScreenState();
+  State<HomeShell> createState() => _HomeShellState();
 }
 
-class _WorkTrackerScreenState extends State<WorkTrackerScreen> {
+class _HomeShellState extends State<HomeShell> {
+  int _index = 0;
+  final GlobalKey<WorkTrackerScreenState> _dashboardKey =
+      GlobalKey<WorkTrackerScreenState>();
+
+  void _goTo(int index) {
+    if (index == _index) return;
+    HapticFeedback.selectionClick();
+    setState(() => _index = index);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Stack(
+        children: [
+          ShellPage(
+            visible: _index == 0,
+            child: WorkTrackerScreen(
+              key: _dashboardKey,
+              onOpenInsights: () => _goTo(1),
+            ),
+          ),
+          ShellPage(
+            visible: _index == 1,
+            child: ValueListenableBuilder<Map<String, dynamic>>(
+              valueListenable: trackerDataNotifier,
+              builder: (_, trackerData, __) =>
+                  InsightsScreen(trackerData: trackerData),
+            ),
+          ),
+          ShellPage(visible: _index == 2, child: const RoutinesScreen()),
+        ],
+      ),
+      floatingActionButton: _index == 0
+          ? FloatingActionButton(
+              heroTag: 'add-lap-button',
+              onPressed: () => _dashboardKey.currentState?.showAddWorkDialog(),
+              child: const Icon(Icons.add, color: Colors.white),
+            ).animate().scale(delay: 300.ms)
+          : null,
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _index,
+        onDestinationSelected: _goTo,
+        height: 68,
+        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+        destinations: [
+          const NavigationDestination(
+            icon: Icon(Icons.dashboard_outlined),
+            selectedIcon: Icon(Icons.dashboard_rounded),
+            label: 'Dashboard',
+          ),
+          const NavigationDestination(
+            icon: Icon(Icons.insights_outlined),
+            selectedIcon: Icon(Icons.insights_rounded),
+            label: 'Insights',
+          ),
+          const NavigationDestination(
+            icon: Icon(Icons.auto_awesome_outlined),
+            selectedIcon: Icon(Icons.auto_awesome_rounded),
+            label: 'Routines',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Fades/slides a shell page in and out while keeping it mounted (streams
+/// stay alive).
+///
+/// Uses an explicit [AnimationController] that always ticks: implicit
+/// animations under a `TickerMode` freeze when their ticker is disabled
+/// mid-transition, which used to leave the outgoing page fully opaque and
+/// visually stacked on top of the page underneath.
+class ShellPage extends StatefulWidget {
+  final bool visible;
+  final Widget child;
+
+  const ShellPage({super.key, required this.visible, required this.child});
+
+  @override
+  State<ShellPage> createState() => ShellPageState();
+}
+
+class ShellPageState extends State<ShellPage>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: Motion.standard,
+      value: widget.visible ? 1 : 0,
+    );
+  }
+
+  @override
+  void didUpdateWidget(ShellPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.visible != widget.visible) {
+      widget.visible ? _controller.forward() : _controller.reverse();
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      ignoring: !widget.visible,
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, child) {
+          final t = Motion.emphasizedCurve.transform(_controller.value);
+          return Opacity(
+            opacity: t,
+            child: Transform.translate(
+              offset: Offset(0, (1 - t) * 12),
+              child: child,
+            ),
+          );
+        },
+        child: widget.child,
+      ),
+    );
+  }
+}
+
+// Main screen for tracking work
+class WorkTrackerScreen extends StatefulWidget {
+  final VoidCallback? onOpenInsights;
+
+  const WorkTrackerScreen({super.key, this.onOpenInsights});
+
+  @override
+  State<WorkTrackerScreen> createState() => WorkTrackerScreenState();
+}
+
+class WorkTrackerScreenState extends State<WorkTrackerScreen> {
   static const String _pinCardDismissedKey = 'pin_card_dismissed_v1';
 
-  final DocumentReference<Map<String, dynamic>> trackerDoc =
-      FirebaseFirestore.instance.collection('habit').doc('tracker');
+  final DocumentReference<Map<String, dynamic>> trackerDoc = FirebaseFirestore
+      .instance
+      .collection('habit')
+      .doc('tracker');
 
   // Cold-start cache + snapshot-driven state.
   Map<String, dynamic>? _cachedTracker;
@@ -92,6 +247,14 @@ class _WorkTrackerScreenState extends State<WorkTrackerScreen> {
     final cached = await TrackerCache.load();
     if (!mounted || cached == null) return;
     setState(() => _cachedTracker = cached);
+    _publishTrackerData(cached);
+  }
+
+  void _publishTrackerData(Map<String, dynamic> docData) {
+    final tracker = (docData['Tracker'] as Map<String, dynamic>?) ?? {};
+    if (!identical(tracker, trackerDataNotifier.value)) {
+      trackerDataNotifier.value = tracker;
+    }
   }
 
   void _onThemeChanged() {
@@ -111,6 +274,7 @@ class _WorkTrackerScreenState extends State<WorkTrackerScreen> {
     _lastTracker = data;
 
     final tracker = (data['Tracker'] as Map<String, dynamic>?) ?? {};
+    _publishTrackerData(data);
     final stats = computeAppStats(tracker);
     _lastStats = stats;
     _lastDailyCounts = dailyTaskCounts(tracker);
@@ -125,7 +289,9 @@ class _WorkTrackerScreenState extends State<WorkTrackerScreen> {
     unawaited(TrackerCache.save(data));
   }
 
-  void _buildTrackerStream(AsyncSnapshot<DocumentSnapshot<Map<String, dynamic>>> snapshot) {
+  void _buildTrackerStream(
+    AsyncSnapshot<DocumentSnapshot<Map<String, dynamic>>> snapshot,
+  ) {
     if (snapshot.hasError) return;
     if (snapshot.hasData && snapshot.data!.exists) {
       final data = snapshot.data!.data() ?? {};
@@ -198,9 +364,7 @@ class _WorkTrackerScreenState extends State<WorkTrackerScreen> {
             onPressed: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(
-                  builder: (context) => const RoutinesScreen(),
-                ),
+                MaterialPageRoute(builder: (context) => const RoutinesScreen()),
               );
             },
           ).animate().fade(delay: 200.ms).scale(),
@@ -239,7 +403,8 @@ class _WorkTrackerScreenState extends State<WorkTrackerScreen> {
                 // Offline / waiting / missing-doc fallbacks.
                 if (_cachedTracker != null) {
                   final trackerData =
-                      (_cachedTracker!['Tracker'] as Map<String, dynamic>?) ?? {};
+                      (_cachedTracker!['Tracker'] as Map<String, dynamic>?) ??
+                      {};
                   final listNames = trackerData.keys.toList();
                   return _buildContent(context, trackerData, listNames);
                 }
@@ -248,28 +413,47 @@ class _WorkTrackerScreenState extends State<WorkTrackerScreen> {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return _buildLoadingState(context);
                 }
-                return _buildEmptyState(
-                  () => _showAddWorkDialog(context, []),
-                );
+                return _buildEmptyState(() => _showAddWorkDialog(const []));
               },
             ),
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        heroTag: 'add-lap-button',
-        onPressed: () async {
-          final doc = await trackerDoc.get();
-          final data = doc.data();
-          final trackerData = data?['Tracker'] as Map<String, dynamic>? ?? {};
-          _showAddWorkDialog(context, trackerData.keys.toList());
-        },
-        child: const Icon(Icons.add, color: Colors.white),
-      ).animate().scale(delay: 300.ms),
     );
   }
 
-  void _showAddWorkDialog(BuildContext context, List<String> listNames) {
+  /// Opens the log-task dialog from the shell FAB. Falls back to fetching
+  /// the tracker doc when the dashboard stream hasn't populated yet.
+  Future<void> showAddWorkDialog() async {
+    final listNames = _currentListNames();
+    if (listNames != null) {
+      _showAddWorkDialog(listNames);
+      return;
+    }
+    try {
+      final doc = await trackerDoc.get();
+      final data = doc.data();
+      final trackerData = data?['Tracker'] as Map<String, dynamic>? ?? {};
+      _showAddWorkDialog(trackerData.keys.toList());
+    } catch (_) {
+      _showAddWorkDialog(const []);
+    }
+  }
+
+  List<String>? _currentListNames() {
+    if (_lastTracker != null) {
+      final tracker = (_lastTracker!['Tracker'] as Map<String, dynamic>?);
+      if (tracker != null) return tracker.keys.toList();
+    }
+    if (_cachedTracker != null) {
+      final tracker = (_cachedTracker!['Tracker'] as Map<String, dynamic>?);
+      if (tracker != null) return tracker.keys.toList();
+    }
+    return null;
+  }
+
+  void _showAddWorkDialog(List<String> listNames) {
+    if (!mounted) return;
     showGeneralDialog(
       context: context,
       barrierDismissible: true,
@@ -279,15 +463,13 @@ class _WorkTrackerScreenState extends State<WorkTrackerScreen> {
       },
       transitionBuilder: (context, animation, secondaryAnimation, child) {
         return SlideTransition(
-          position: Tween<Offset>(
-            begin: const Offset(0, 1),
-            end: Offset.zero,
-          ).animate(
-            CurvedAnimation(
-              parent: animation,
-              curve: Curves.easeInOutCubic,
-            ),
-          ),
+          position: Tween<Offset>(begin: const Offset(0, 1), end: Offset.zero)
+              .animate(
+                CurvedAnimation(
+                  parent: animation,
+                  curve: Curves.easeInOutCubic,
+                ),
+              ),
           child: child,
         );
       },
@@ -298,36 +480,36 @@ class _WorkTrackerScreenState extends State<WorkTrackerScreen> {
   Widget _buildLoadingState(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final baseColor = isDark ? Colors.white10 : Colors.grey.shade200;
-    final highlightColor =
-        isDark ? Colors.white.withOpacity(0.2) : Colors.grey.shade50;
+    final highlightColor = isDark
+        ? Colors.white.withOpacity(0.2)
+        : Colors.grey.shade50;
 
     return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        children: [
-          Container(
-            height: 230,
-            width: double.infinity,
-            decoration: BoxDecoration(
-              color: baseColor,
-              borderRadius: BorderRadius.circular(20),
-            ),
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: [
+              Container(
+                height: 230,
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: baseColor,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+              ),
+              const SizedBox(height: 24),
+              Container(
+                height: 400,
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: baseColor,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 24),
-          Container(
-            height: 400,
-            width: double.infinity,
-            decoration: BoxDecoration(
-              color: baseColor,
-              borderRadius: BorderRadius.circular(16),
-            ),
-          ),
-        ],
-      ),
-    ).animate(onPlay: (controller) => controller.repeat()).shimmer(
-          duration: 1200.ms,
-          color: highlightColor,
-        );
+        )
+        .animate(onPlay: (controller) => controller.repeat())
+        .shimmer(duration: 1200.ms, color: highlightColor);
   }
 
   Widget _buildErrorState() {
@@ -406,7 +588,10 @@ class _WorkTrackerScreenState extends State<WorkTrackerScreen> {
             children: [
               Text(
                 title,
-                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
               Text(
                 subtitle,
@@ -425,17 +610,14 @@ class _WorkTrackerScreenState extends State<WorkTrackerScreen> {
     List<String> listNames,
   ) {
     if (listNames.isEmpty) {
-      return _buildEmptyState(() => _showAddWorkDialog(context, []));
+      return _buildEmptyState(() => _showAddWorkDialog(const []));
     }
 
     final workListCards = listNames.map((listName) {
       final listData = trackerData[listName] as Map<String, dynamic>? ?? {};
       return Padding(
         padding: const EdgeInsets.only(bottom: 24),
-        child: WorkListCard(
-          title: listName,
-          data: listData,
-        ),
+        child: WorkListCard(title: listName, data: listData),
       );
     }).toList();
 
@@ -464,8 +646,7 @@ class _WorkTrackerScreenState extends State<WorkTrackerScreen> {
 
   Widget _buildPinWidgetCard(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final accent =
-        isDark ? const Color(0xFFE84545) : const Color(0xFF0066CC);
+    final accent = isDark ? const Color(0xFFE84545) : const Color(0xFF0066CC);
 
     return Container(
       width: double.infinity,
@@ -532,11 +713,14 @@ class _WorkTrackerScreenState extends State<WorkTrackerScreen> {
         ? const Color(0xFF1E1E1E).withOpacity(0.88)
         : Colors.white.withOpacity(0.96);
 
-    final primaryAccent =
-        isDark ? const Color(0xFFE84545) : const Color(0xFF0066CC);
+    final primaryAccent = isDark
+        ? const Color(0xFFE84545)
+        : const Color(0xFF0066CC);
 
     final subtitleColor = isDark ? Colors.white60 : Colors.black54;
-    final dividerColor = isDark ? Colors.white12 : Colors.black.withOpacity(0.06);
+    final dividerColor = isDark
+        ? Colors.white12
+        : Colors.black.withOpacity(0.06);
 
     return Container(
       width: double.infinity,
@@ -571,10 +755,7 @@ class _WorkTrackerScreenState extends State<WorkTrackerScreen> {
           const SizedBox(height: 6),
           Text(
             'Quick summary of your tracker',
-            style: TextStyle(
-              fontSize: 13,
-              color: subtitleColor,
-            ),
+            style: TextStyle(fontSize: 13, color: subtitleColor),
           ),
           const SizedBox(height: 18),
           Row(
@@ -627,16 +808,7 @@ class _WorkTrackerScreenState extends State<WorkTrackerScreen> {
             children: [
               Expanded(
                 child: FilledButton.icon(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => InsightsScreen(
-                          trackerData: tracker,
-                        ),
-                      ),
-                    );
-                  },
+                  onPressed: widget.onOpenInsights,
                   icon: const Icon(Icons.insights_outlined),
                   label: const Text('Insights'),
                 ),
@@ -647,9 +819,7 @@ class _WorkTrackerScreenState extends State<WorkTrackerScreen> {
                   onPressed: () {
                     Navigator.push(
                       context,
-                      MaterialPageRoute(
-                        builder: (_) => const RoutinesScreen(),
-                      ),
+                      MaterialPageRoute(builder: (_) => const RoutinesScreen()),
                     );
                   },
                   icon: const Icon(Icons.auto_awesome_outlined),
@@ -673,51 +843,54 @@ class _WorkTrackerScreenState extends State<WorkTrackerScreen> {
     final iconColor = isDark ? Colors.white70 : Colors.black54;
     final labelColor = isDark ? Colors.grey[400]! : Colors.grey[700]!;
 
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: isDark
-            ? Colors.white.withOpacity(0.05)
-            : const Color(0xFFF7F9FC),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isDark ? Colors.white10 : Colors.black.withOpacity(0.04),
-        ),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, size: 20, color: iconColor),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Animate()
-                    .custom(
-                      duration: 1000.ms,
-                      curve: Curves.easeOutCubic,
-                      begin: 0,
-                      end: value.toDouble(),
-                      builder: (_, val, __) => Text(
-                        val.toInt().toString(),
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    )
-                    .fadeIn(),
-                const SizedBox(height: 2),
-                Text(
-                  label,
-                  style: TextStyle(fontSize: 12, color: labelColor),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
+    return PressableScale(
+      onTap: () => HapticFeedback.lightImpact(),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: isDark
+              ? Colors.white.withOpacity(0.05)
+              : const Color(0xFFF7F9FC),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isDark ? Colors.white10 : Colors.black.withOpacity(0.04),
           ),
-        ],
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 20, color: iconColor),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Animate()
+                      .custom(
+                        duration: 1000.ms,
+                        curve: Curves.easeOutCubic,
+                        begin: 0,
+                        end: value.toDouble(),
+                        builder: (_, val, __) => Text(
+                          val.toInt().toString(),
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      )
+                      .fadeIn(),
+                  const SizedBox(height: 2),
+                  Text(
+                    label,
+                    style: TextStyle(fontSize: 12, color: labelColor),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -780,10 +953,8 @@ class _AddWorkDialogState extends State<AddWorkDialog> {
                   ),
                   items: [
                     ...widget.existingLists.map(
-                      (list) => DropdownMenuItem(
-                        value: list,
-                        child: Text(list),
-                      ),
+                      (list) =>
+                          DropdownMenuItem(value: list, child: Text(list)),
                     ),
                     const DropdownMenuItem(
                       value: '---NEW---',
@@ -870,8 +1041,9 @@ class _AddWorkDialogState extends State<AddWorkDialog> {
           ElevatedButton(
             onPressed: _saveWorkEntry,
             style: ElevatedButton.styleFrom(
-              backgroundColor:
-                  isDark ? const Color(0xFFE84545) : const Color(0xFF0066CC),
+              backgroundColor: isDark
+                  ? const Color(0xFFE84545)
+                  : const Color(0xFF0066CC),
               foregroundColor: Colors.white,
             ),
             child: const Text('Save Lap'),
@@ -894,7 +1066,9 @@ class _AddWorkDialogState extends State<AddWorkDialog> {
   }
 
   Future<void> _saveWorkEntry() async {
-    final listName = _isNewList ? _newListController.text.trim() : _selectedList;
+    final listName = _isNewList
+        ? _newListController.text.trim()
+        : _selectedList;
 
     if (listName == null || listName.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -919,18 +1093,18 @@ class _AddWorkDialogState extends State<AddWorkDialog> {
       'difficulty': _selectedDifficulty,
     };
 
-    final trackerRef =
-        FirebaseFirestore.instance.collection('habit').doc('tracker');
+    final trackerRef = FirebaseFirestore.instance
+        .collection('habit')
+        .doc('tracker');
 
     try {
-      await trackerRef.set(
-        {
-          'Tracker': {
-            listName: {dateStr: FieldValue.arrayUnion([newEntry])}
-          }
+      await trackerRef.set({
+        'Tracker': {
+          listName: {
+            dateStr: FieldValue.arrayUnion([newEntry]),
+          },
         },
-        SetOptions(merge: true),
-      );
+      }, SetOptions(merge: true));
 
       if (mounted) {
         Navigator.of(context).pop();
@@ -975,7 +1149,9 @@ class WorkListCard extends StatelessWidget {
 
     return Container(
       decoration: BoxDecoration(
-        color: (isDark ? const Color(0xFF1E1E1E) : Colors.white).withOpacity(0.88),
+        color: (isDark ? const Color(0xFF1E1E1E) : Colors.white).withOpacity(
+          0.88,
+        ),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: isDark ? Colors.white12 : Colors.black.withOpacity(0.05),
@@ -1014,8 +1190,7 @@ class WorkListCard extends StatelessWidget {
 
   Widget _buildHeader(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final accent =
-        isDark ? const Color(0xFFE84545) : const Color(0xFF0066CC);
+    final accent = isDark ? const Color(0xFFE84545) : const Color(0xFF0066CC);
 
     return Padding(
       padding: const EdgeInsets.all(20),
@@ -1089,7 +1264,9 @@ class WorkListCard extends StatelessWidget {
         children: [
           Icon(
             _getIconForCategory(category),
-            color: _getDifficultyColor(entry['difficulty']?.toString() ?? 'EASY'),
+            color: _getDifficultyColor(
+              entry['difficulty']?.toString() ?? 'EASY',
+            ),
             size: 20,
           ),
           const SizedBox(width: 12),
@@ -1131,16 +1308,18 @@ class WorkListCard extends StatelessWidget {
       if (activities is List) {
         for (final activity in activities) {
           if (activity is Map<String, dynamic>) {
-            entries.add({...Map<String, dynamic>.from(activity), 'date': dateStr});
+            entries.add({
+              ...Map<String, dynamic>.from(activity),
+              'date': dateStr,
+            });
           }
         }
       }
     });
 
     entries.sort(
-      (a, b) => _parseDate(
-        b['date'] ?? '',
-      ).compareTo(_parseDate(a['date'] ?? '')),
+      (a, b) =>
+          _parseDate(b['date'] ?? '').compareTo(_parseDate(a['date'] ?? '')),
     );
 
     return entries;
