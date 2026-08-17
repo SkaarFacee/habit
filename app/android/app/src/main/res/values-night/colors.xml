@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Must match WidgetCardStyle.background(isDark) in widget_card_style.dart. -->
+    <color name="widget_background">#15171C</color>
+</resources>
