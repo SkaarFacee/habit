@@ -2,14 +2,17 @@
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/widget_background">
+    android:background="@drawable/widget_background"
+    android:clipToOutline="true">
 
-    <!-- The Flutter-rendered heatmap PNG replaces this sample at runtime. -->
+    <!-- The Flutter-rendered PNG replaces this sample at runtime. fitCenter
+         letterboxes any aspect mismatch, which is invisible because the root
+         background matches the card surface color. -->
     <ImageView
         android:id="@+id/widget_image"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:scaleType="fitXY"
+        android:scaleType="fitCenter"
         android:contentDescription="@string/app_name"
         android:src="@drawable/widget_heatmap_preview" />
 
