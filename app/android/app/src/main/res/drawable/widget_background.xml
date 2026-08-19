@@ -1,4 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Matches the card surface rendered by Flutter (values-night carries the
+     dark variant) so any letterboxing around the PNG is invisible and the
+     widget reads as one seamless card. -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android">
-    <corners android:radius="16dp" />
-    <solid android:color="?android:attr/colorBackground" />
+    <corners android:radius="20dp" />
+    <solid android:color="@color/widget_background" />
 </shape>
