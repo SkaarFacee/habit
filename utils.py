@@ -105,10 +105,14 @@ class SaveUtils:
         json.dump(self.data,open(LIST_TRACKER,'w'))
         firebase_obj.push(self.data)
 
-    def save_atomic(self,firebase_obj,atomic_habits):
+    def save_atomic(self,firebase_obj,atomic_habits,routines=None,habits_by_routine=None):
         with open(ATOMIC_HABITS, 'r') as f:
             data = json.load(f)
         data["habits"]=atomic_habits
+        if routines is not None:
+            data["routines"]=routines
+        if habits_by_routine is not None:
+            data["habits_by_routine"]=habits_by_routine
         json.dump(data,open(ATOMIC_HABITS,'w'))
         firebase_obj.push_atomic(data)
 
