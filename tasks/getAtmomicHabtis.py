@@ -108,6 +108,18 @@ def find_existing_habit_case_insensitive(habits: List[str], candidate: str) -> O
     return None
 
 
+def _dedupe_case_insensitive(values: Iterable[str]) -> List[str]:
+    seen = set()
+    out = []
+    for raw in values:
+        value = str(raw).strip()
+        key = value.lower()
+        if value and key not in seen:
+            seen.add(key)
+            out.append(value)
+    return out
+
+
 def clean_notes(notes: Any) -> str:
     text = str(notes or "").strip()
     if normalize_key(text) in {"", "none", "null", "na", "n a", "nil"}:
@@ -196,6 +208,191 @@ def llm_match_or_create_habit(
     }
 
 
+# ----------------- Routines -----------------
+ROUTINE_SYSTEM_PROMPT = (
+    "You organize atomic habits into daily routines.\n"
+    "Rules:\n"
+    "- Assign every habit to exactly one routine.\n"
+    "- Reuse existing routine names exactly whenever a habit already belongs "
+    "to one or when one clearly fits.\n"
+    "- Create a new routine only if no existing routine fits. New routine "
+    "names must be short (max 3 words), Title Case, generic and reusable "
+    "(e.g. 'Wakeup', 'Productivity', 'Uni Studies').\n"
+    "- Use the routine 'Other' only when nothing else fits.\n"
+    "- Keep the total number of routines small.\n"
+    "Return STRICT JSON only."
+)
+
+
+def llm_assign_routines(
+    client: Groq,
+    model: str,
+    habits: List[str],
+    routines: List[str],
+    habits_by_routine: Dict[str, List[str]],
+) -> Tuple[List[str], Dict[str, List[str]]]:
+    """
+    Asks the LLM for a complete routine assignment.
+
+    Returns (routines, habits_by_routine) as plain lists/dicts.
+    """
+    user = (
+        f"Habits:\n{json.dumps(habits, ensure_ascii=False)}\n\n"
+        f"Existing routines:\n{json.dumps(routines, ensure_ascii=False)}\n\n"
+        f"Existing mapping:\n{json.dumps(habits_by_routine, ensure_ascii=False)}\n\n"
+        "Output schema:\n"
+        '{ "routines": ["Routine A", "Routine B"], '
+        '"habits_by_routine": { "Routine A": ["habit", "habit"], '
+        '"Routine B": ["habit"] } }\n'
+        "Every habit must appear in exactly one routine."
+    )
+
+    resp = client.chat.completions.create(
+        model=model,
+        messages=[
+            {"role": "system", "content": ROUTINE_SYSTEM_PROMPT},
+            {"role": "user", "content": user},
+        ],
+        response_format={"type": "json_object"},
+        temperature=0.1,
+    )
+
+    data = json.loads(resp.choices[0].message.content)
+
+    raw_routines = data.get("routines", [])
+    raw_mapping = data.get("habits_by_routine", {})
+
+    routines_out = [
+        str(r).strip() for r in raw_routines if isinstance(r, str) and str(r).strip()
+    ]
+
+    mapping_out: Dict[str, List[str]] = {}
+    if isinstance(raw_mapping, dict):
+        for key, value in raw_mapping.items():
+            routine = str(key).strip()
+            if not routine:
+                continue
+            items = value if isinstance(value, list) else []
+            mapping_out[routine] = [
+                str(v).strip() for v in items if isinstance(v, str) and str(v).strip()
+            ]
+
+    return routines_out, mapping_out
+
+
+def normalize_routine_assignment(
+    habits: List[str],
+    routines: List[str],
+    habits_by_routine: Dict[str, List[str]],
+) -> Tuple[List[str], Dict[str, List[str]]]:
+    """
+    Defensive post-processing so the persisted mapping is always valid:
+
+    - every habit is assigned to exactly one routine (first claim wins)
+    - routine names are deduped case-insensitively (first spelling wins)
+    - anything unassigned lands in 'Other'
+    - empty routines are dropped
+    """
+    habit_names = _dedupe_case_insensitive(habits)
+    habit_keys = {habit.lower(): habit for habit in habit_names}
+
+    ordered_routines: List[str] = []
+    canonical_routine: Dict[str, str] = {}
+
+    for routine in _dedupe_case_insensitive(routines or []):
+        key = routine.lower()
+        if key == "other":
+            continue
+        canonical_routine[key] = routine
+        ordered_routines.append(routine)
+
+    assignment: Dict[str, str] = {}
+
+    for routine_raw, items in (habits_by_routine or {}).items():
+        routine = str(routine_raw).strip()
+        if not routine:
+            continue
+
+        key = routine.lower()
+        if key == "other":
+            continue
+
+        display = canonical_routine.get(key)
+        if display is None:
+            canonical_routine[key] = routine
+            ordered_routines.append(routine)
+            display = routine
+
+        for habit in items or []:
+            habit_key = str(habit).strip().lower()
+            if habit_key in habit_keys and habit_key not in assignment:
+                assignment[habit_key] = display
+
+    other_name = "Other"
+    for habit_key, habit in habit_keys.items():
+        if habit_key not in assignment:
+            assignment[habit_key] = other_name
+
+    final_mapping: Dict[str, List[str]] = {}
+    for habit_key, routine in assignment.items():
+        final_mapping.setdefault(routine, []).append(habit_keys[habit_key])
+
+    final_routines = [r for r in ordered_routines if final_mapping.get(r)]
+    if final_mapping.get(other_name):
+        final_routines.append(other_name)
+
+    cleaned_mapping = {
+        routine: _dedupe_case_insensitive(final_mapping[routine])
+        for routine in final_routines
+    }
+
+    return final_routines, cleaned_mapping
+
+
+def assign_routines(
+    client: Groq,
+    model: str,
+    habits: List[str],
+    routines: Optional[List[str]] = None,
+    habits_by_routine: Optional[Dict[str, List[str]]] = None,
+) -> Tuple[List[str], Dict[str, List[str]]]:
+    """
+    Assigns every habit to a routine. Falls back to the existing mapping
+    (normalized) if the LLM call fails.
+    """
+    habits_list = _dedupe_case_insensitive(habits)
+    if not habits_list:
+        return [], {}
+
+    existing_routines = _dedupe_case_insensitive(routines or [])
+
+    existing_mapping: Dict[str, List[str]] = {}
+    if isinstance(habits_by_routine, dict):
+        for key, value in habits_by_routine.items():
+            if not isinstance(value, list):
+                continue
+            routine = str(key).strip()
+            if not routine:
+                continue
+            existing_mapping[routine] = [
+                str(v).strip() for v in value if isinstance(v, str)
+            ]
+
+    try:
+        llm_routines, llm_mapping = llm_assign_routines(
+            client=client,
+            model=model,
+            habits=habits_list,
+            routines=existing_routines,
+            habits_by_routine=existing_mapping,
+        )
+    except Exception:
+        # LLM unavailable: keep the existing mapping as-is (normalized).
+        llm_routines, llm_mapping = existing_routines, existing_mapping
+
+    return normalize_routine_assignment(habits_list, llm_routines, llm_mapping)
+
+
 # ----------------- Pipeline -----------------
 def update_tracker(payload: Dict[str, Any], model: str = DEFAULT_MODEL) -> Tuple[Dict[str, Any], List[str]]:
     # Check .habit file first, then fall back to environment
@@ -261,6 +458,37 @@ def update_tracker(payload: Dict[str, Any], model: str = DEFAULT_MODEL) -> Tuple
     return new_payload, list(habits_list)
 
 
-def main(payload: Dict[str, Any]) -> Tuple[Dict[str, Any], List[str]]:
+def main(
+    payload: Dict[str, Any],
+    atomic_doc: Optional[Dict[str, Any]] = None,
+) -> Tuple[Dict[str, Any], List[str], List[str], Dict[str, List[str]]]:
+    """
+    Tags tasks with atomic habits, then assigns every habit to a routine.
+
+    Returns (updated_payload, habits, routines, habits_by_routine).
+    """
     updated_payload, updated_habits = update_tracker(payload)
-    return updated_payload, updated_habits
+
+    atomic_doc = atomic_doc or {}
+    current_routines = atomic_doc.get("routines") or []
+    current_mapping = atomic_doc.get("habits_by_routine") or {}
+
+    env = dotenv_values(Path.home() / CONFIG_FILE)
+    api_key = env.get("GROQ_API_KEY") or os.getenv("GROQ_API_KEY")
+
+    if api_key:
+        client = Groq(api_key=api_key)
+        routines, habits_by_routine = assign_routines(
+            client=client,
+            model=DEFAULT_MODEL,
+            habits=updated_habits,
+            routines=current_routines,
+            habits_by_routine=current_mapping,
+        )
+    else:
+        # No API key: keep the existing mapping untouched (normalized).
+        routines, habits_by_routine = normalize_routine_assignment(
+            updated_habits, current_routines, current_mapping
+        )
+
+    return updated_payload, updated_habits, routines, habits_by_routine
