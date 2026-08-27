@@ -65,10 +65,10 @@ if __name__ == '__main__':
     if not args.list:
         titles=tasks_obj.read_local_list()
         response=tasks_obj.list_google_tasks(titles,provider,model)  
-        response,habits_tracker=main(response)
+        response,habits_tracker,routines,habits_by_routine=main(response,atomic_habits_data or {})
         print(response)
         print(habits_tracker)
         save_utils.save(response,firebase_obj)  
-        save_utils.save_atomic(firebase_obj,habits_tracker)
+        save_utils.save_atomic(firebase_obj,habits_tracker,routines,habits_by_routine)
         for t in response.keys():
             TaskView.display_tasks(response[t])
