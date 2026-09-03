@@ -1,12 +1,20 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:home_widget/home_widget.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import 'shared/chunked_contribution_grid.dart';
 import 'shared/neon_ribbon_background.dart';
 import 'shared/theme.dart';
+import 'services/stats.dart';
+import 'services/tracker_cache.dart';
+import 'services/widget_sync.dart';
 import 'insights_screen.dart';
-import 'atomic_habits_screen.dart';
 import 'routines_screen.dart';
 
 // Main app entry point
@@ -39,14 +47,145 @@ class MyApp extends StatelessWidget {
 }
 
 // Main screen for tracking work
-class WorkTrackerScreen extends StatelessWidget {
+class WorkTrackerScreen extends StatefulWidget {
   const WorkTrackerScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final DocumentReference<Map<String, dynamic>> trackerDoc =
-        FirebaseFirestore.instance.collection('habit').doc('tracker');
+  State<WorkTrackerScreen> createState() => _WorkTrackerScreenState();
+}
 
+class _WorkTrackerScreenState extends State<WorkTrackerScreen> {
+  static const String _pinCardDismissedKey = 'pin_card_dismissed_v1';
+
+  final DocumentReference<Map<String, dynamic>> trackerDoc =
+      FirebaseFirestore.instance.collection('habit').doc('tracker');
+
+  // Cold-start cache + snapshot-driven state.
+  Map<String, dynamic>? _cachedTracker;
+  Map<String, dynamic>? _lastTracker;
+  AppStats? _lastStats;
+  Map<DateTime, int> _lastDailyCounts = const {};
+  Map<String, dynamic>? _processedData;
+
+  // Widget pin onboarding card.
+  bool _showPinWidgetCard = false;
+  bool _pinCardChecked = false;
+
+  // Flush the widget immediately on the next tracker update (after a save).
+  bool _flushWidgetNext = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCache();
+    _initPinWidgetCard();
+    themeNotifier.addListener(_onThemeChanged);
+  }
+
+  @override
+  void dispose() {
+    themeNotifier.removeListener(_onThemeChanged);
+    super.dispose();
+  }
+
+  Future<void> _loadCache() async {
+    final cached = await TrackerCache.load();
+    if (!mounted || cached == null) return;
+    setState(() => _cachedTracker = cached);
+  }
+
+  void _onThemeChanged() {
+    final stats = _lastStats;
+    if (stats != null) {
+      WidgetSync.schedulePush(
+        stats: stats,
+        dailyCounts: _lastDailyCounts,
+        immediate: true,
+      );
+    }
+  }
+
+  void _handleTrackerData(Map<String, dynamic> data) {
+    if (identical(_processedData, data) && _lastStats != null) return;
+    _processedData = data;
+    _lastTracker = data;
+
+    final tracker = (data['Tracker'] as Map<String, dynamic>?) ?? {};
+    final stats = computeAppStats(tracker);
+    _lastStats = stats;
+    _lastDailyCounts = dailyTaskCounts(tracker);
+
+    WidgetSync.schedulePush(
+      stats: stats,
+      dailyCounts: _lastDailyCounts,
+      immediate: _flushWidgetNext,
+    );
+    _flushWidgetNext = false;
+
+    unawaited(TrackerCache.save(data));
+  }
+
+  void _buildTrackerStream(AsyncSnapshot<DocumentSnapshot<Map<String, dynamic>>> snapshot) {
+    if (snapshot.hasError) return;
+    if (snapshot.hasData && snapshot.data!.exists) {
+      final data = snapshot.data!.data() ?? {};
+      if (!identical(data, _processedData)) {
+        _handleTrackerData(data);
+      }
+    }
+  }
+
+  void _onTaskSaved() {
+    _flushWidgetNext = true;
+    unawaited(HapticFeedback.mediumImpact());
+  }
+
+  AppStats _statsFor(Map<String, dynamic> tracker) {
+    if (identical(_lastTracker, tracker) && _lastStats != null) {
+      return _lastStats!;
+    }
+    final stats = computeAppStats(tracker);
+    _lastTracker = tracker;
+    _lastStats = stats;
+    return stats;
+  }
+
+  Future<void> _initPinWidgetCard() async {
+    if (_pinCardChecked) return;
+    _pinCardChecked = true;
+    try {
+      final supported = await HomeWidget.isRequestPinWidgetSupported() ?? false;
+      if (!supported || !mounted) return;
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getBool(_pinCardDismissedKey) ?? false) return;
+      final installed = await HomeWidget.getInstalledWidgets();
+      if (installed.isEmpty && mounted) {
+        setState(() => _showPinWidgetCard = true);
+      }
+    } catch (_) {
+      // Plugin missing/unsupported: pin card simply never shows.
+    }
+  }
+
+  Future<void> _dismissPinCard() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_pinCardDismissedKey, true);
+    } catch (_) {}
+    if (mounted) {
+      setState(() => _showPinWidgetCard = false);
+    }
+  }
+
+  Future<void> _pinWidget() async {
+    try {
+      await HomeWidget.requestPinWidget(androidName: 'WidgetProvider');
+    } catch (_) {}
+    await _dismissPinCard();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: AppBar(
@@ -87,22 +226,31 @@ class WorkTrackerScreen extends StatelessWidget {
             child: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
               stream: trackerDoc.snapshots(),
               builder: (context, snapshot) {
+                _buildTrackerStream(snapshot);
+
+                if (snapshot.hasData && snapshot.data!.exists) {
+                  final data = snapshot.data!.data() ?? {};
+                  final trackerData =
+                      (data['Tracker'] as Map<String, dynamic>?) ?? {};
+                  final listNames = trackerData.keys.toList();
+                  return _buildContent(context, trackerData, listNames);
+                }
+
+                // Offline / waiting / missing-doc fallbacks.
+                if (_cachedTracker != null) {
+                  final trackerData =
+                      (_cachedTracker!['Tracker'] as Map<String, dynamic>?) ?? {};
+                  final listNames = trackerData.keys.toList();
+                  return _buildContent(context, trackerData, listNames);
+                }
+
                 if (snapshot.hasError) return _buildErrorState();
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return _buildLoadingState(context);
                 }
-                if (!snapshot.hasData || !snapshot.data!.exists) {
-                  return _buildEmptyState(
-                    () => _showAddWorkDialog(context, []),
-                  );
-                }
-
-                final data = snapshot.data!.data() ?? {};
-                final trackerData =
-                    (data['Tracker'] as Map<String, dynamic>?) ?? {};
-                final listNames = trackerData.keys.toList();
-
-                return _buildContent(context, trackerData, listNames);
+                return _buildEmptyState(
+                  () => _showAddWorkDialog(context, []),
+                );
               },
             ),
           ),
@@ -127,7 +275,7 @@ class WorkTrackerScreen extends StatelessWidget {
       barrierDismissible: true,
       barrierLabel: 'Dismiss',
       pageBuilder: (context, animation, secondaryAnimation) {
-        return AddWorkDialog(existingLists: listNames);
+        return AddWorkDialog(existingLists: listNames, onSaved: _onTaskSaved);
       },
       transitionBuilder: (context, animation, secondaryAnimation, child) {
         return SlideTransition(
@@ -187,24 +335,88 @@ class WorkTrackerScreen extends StatelessWidget {
   }
 
   Widget _buildEmptyState(VoidCallback onAdd) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final stepColor = isDark ? Colors.white60 : Colors.grey.shade700;
+
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.flag_outlined, size: 64, color: Colors.grey),
-          const SizedBox(height: 16),
-          const Text(
-            'No Tracks Yet',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
-          ),
-          const SizedBox(height: 8),
-          TextButton(
-            onPressed: onAdd,
-            child: const Text('Tap + to start a new track'),
-          ),
-        ],
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.flag_outlined, size: 64, color: Colors.grey),
+            const SizedBox(height: 16),
+            const Text(
+              'No Tracks Yet',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
+            ),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: onAdd,
+              child: const Text('Tap + to start a new track'),
+            ),
+            const SizedBox(height: 28),
+            _buildEmptyStep(
+              icon: Icons.playlist_add,
+              title: 'Add a track',
+              subtitle: 'Tap + and log your first task.',
+              color: stepColor,
+            ),
+            const SizedBox(height: 16),
+            _buildEmptyStep(
+              icon: Icons.insights_outlined,
+              title: 'Check insights',
+              subtitle: 'Your streaks and weekly review land here.',
+              color: stepColor,
+            ),
+            const SizedBox(height: 16),
+            _buildEmptyStep(
+              icon: Icons.calendar_month_outlined,
+              title: 'Grow your heatmap',
+              subtitle: 'Every logged task colors the grid.',
+              color: stepColor,
+            ),
+          ],
+        ),
       ),
     ).animate().fadeIn(duration: 500.ms);
+  }
+
+  Widget _buildEmptyStep({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required Color color,
+  }) {
+    return Row(
+      children: [
+        Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Icon(icon, color: color, size: 22),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+              ),
+              Text(
+                subtitle,
+                style: TextStyle(fontSize: 12.5, color: Colors.grey),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 
   Widget _buildContent(
@@ -232,6 +444,10 @@ class WorkTrackerScreen extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (_showPinWidgetCard) ...[
+            _buildPinWidgetCard(context),
+            const SizedBox(height: 16),
+          ],
           _buildSummaryCard(context, trackerData)
               .animate()
               .fadeIn(duration: 600.ms)
@@ -246,8 +462,70 @@ class WorkTrackerScreen extends StatelessWidget {
     );
   }
 
+  Widget _buildPinWidgetCard(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final accent =
+        isDark ? const Color(0xFFE84545) : const Color(0xFF0066CC);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(16, 14, 8, 14),
+      decoration: BoxDecoration(
+        color: accent.withOpacity(0.06),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: accent.withOpacity(0.25)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: accent.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Icon(Icons.widgets_outlined, color: accent, size: 22),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Pin your widget',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Your heatmap, streak and today\'s count right on your home screen.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isDark ? Colors.white60 : Colors.black54,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            tooltip: 'Add widget',
+            onPressed: _pinWidget,
+            icon: Icon(Icons.add_circle_outline, color: accent),
+          ),
+          IconButton(
+            tooltip: 'Dismiss',
+            onPressed: _dismissPinCard,
+            icon: const Icon(Icons.close, size: 18, color: Colors.grey),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildSummaryCard(BuildContext context, Map<String, dynamic> tracker) {
-    final stats = _calculateOverallStats(tracker);
+    final stats = _statsFor(tracker);
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     final cardColor = isDark
@@ -305,7 +583,7 @@ class WorkTrackerScreen extends StatelessWidget {
                 child: _buildSummaryItem(
                   context,
                   'Active Days',
-                  stats['workDays'] ?? 0,
+                  stats.workDays,
                   Icons.calendar_today_outlined,
                 ),
               ),
@@ -314,7 +592,7 @@ class WorkTrackerScreen extends StatelessWidget {
                 child: _buildSummaryItem(
                   context,
                   'Total Tasks',
-                  stats['totalTasks'] ?? 0,
+                  stats.totalTasks,
                   Icons.outlined_flag,
                 ),
               ),
@@ -327,7 +605,7 @@ class WorkTrackerScreen extends StatelessWidget {
                 child: _buildSummaryItem(
                   context,
                   'Current Streak',
-                  stats['currentStreak'] ?? 0,
+                  stats.currentStreak,
                   Icons.local_fire_department_outlined,
                 ),
               ),
@@ -336,7 +614,7 @@ class WorkTrackerScreen extends StatelessWidget {
                 child: _buildSummaryItem(
                   context,
                   'This Week',
-                  stats['thisWeek'] ?? 0,
+                  stats.thisWeek,
                   Icons.date_range_outlined,
                 ),
               ),
@@ -443,75 +721,14 @@ class WorkTrackerScreen extends StatelessWidget {
       ),
     );
   }
-
-  Map<String, int> _calculateOverallStats(Map<String, dynamic> tracker) {
-    int totalTasks = 0;
-    int thisWeekTasks = 0;
-    final now = DateTime.now();
-    final startOfWeek = now.subtract(Duration(days: now.weekday - 1));
-    final weekStartDate =
-        DateTime(startOfWeek.year, startOfWeek.month, startOfWeek.day);
-    final Set<DateTime> workDaysList = {};
-
-    tracker.forEach((listName, listData) {
-      if (listData is Map<String, dynamic>) {
-        listData.forEach((dateStr, activities) {
-          if (activities is List && activities.isNotEmpty) {
-            try {
-              final parts = dateStr.split('-');
-              if (parts.length == 3) {
-                final date = DateTime(
-                  int.parse(parts[2]),
-                  int.parse(parts[1]),
-                  int.parse(parts[0]),
-                );
-                final dayOnly = DateTime(date.year, date.month, date.day);
-                workDaysList.add(dayOnly);
-                final tasksOnDay = activities.length;
-                totalTasks += tasksOnDay;
-                if (!dayOnly.isBefore(weekStartDate)) {
-                  thisWeekTasks += tasksOnDay;
-                }
-              }
-            } catch (_) {}
-          }
-        });
-      }
-    });
-
-    int currentStreak = 0;
-    if (workDaysList.isNotEmpty) {
-      final sortedDays = workDaysList.toList()
-        ..sort((a, b) => b.compareTo(a));
-
-      final today = DateTime(now.year, now.month, now.day);
-      final yesterday = today.subtract(const Duration(days: 1));
-
-      if (sortedDays.first == today || sortedDays.first == yesterday) {
-        currentStreak = 1;
-        for (int i = 0; i < sortedDays.length - 1; i++) {
-          if (sortedDays[i].difference(sortedDays[i + 1]).inDays == 1) {
-            currentStreak++;
-          } else {
-            break;
-          }
-        }
-      }
-    }
-
-    return {
-      'workDays': workDaysList.length,
-      'totalTasks': totalTasks,
-      'currentStreak': currentStreak,
-      'thisWeek': thisWeekTasks,
-    };
-  }
 }
 
 // Dialog for adding a new work entry
 class AddWorkDialog extends StatefulWidget {
   final List<String> existingLists;
-  const AddWorkDialog({super.key, required this.existingLists});
+  final VoidCallback? onSaved;
+
+  const AddWorkDialog({super.key, required this.existingLists, this.onSaved});
 
   @override
   State<AddWorkDialog> createState() => _AddWorkDialogState();
@@ -717,6 +934,7 @@ class _AddWorkDialogState extends State<AddWorkDialog> {
 
       if (mounted) {
         Navigator.of(context).pop();
+        widget.onSaved?.call();
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Lap saved!'),
@@ -967,9 +1185,30 @@ class WorkListCard extends StatelessWidget {
 }
 
 // GitHub-style contribution graph widget
-class ContributionGraph extends StatelessWidget {
+class ContributionGraph extends StatefulWidget {
   final Map<String, dynamic> data;
   const ContributionGraph({super.key, required this.data});
+
+  @override
+  State<ContributionGraph> createState() => _ContributionGraphState();
+}
+
+class _ContributionGraphState extends State<ContributionGraph> {
+  late Map<DateTime, Map<String, dynamic>> _workDataMap;
+
+  @override
+  void initState() {
+    super.initState();
+    _workDataMap = _getWorkDataMap();
+  }
+
+  @override
+  void didUpdateWidget(ContributionGraph oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.data != widget.data) {
+      _workDataMap = _getWorkDataMap();
+    }
+  }
 
   DateTime _parseDate(String dateStr) {
     final parts = dateStr.split('-');
@@ -984,7 +1223,7 @@ class ContributionGraph extends StatelessWidget {
   Map<DateTime, Map<String, dynamic>> _getWorkDataMap() {
     final Map<DateTime, Map<String, dynamic>> dataMap = {};
 
-    data.forEach((dateStr, activities) {
+    widget.data.forEach((dateStr, activities) {
       if (activities is List && activities.isNotEmpty) {
         try {
           final date = _parseDate(dateStr);
@@ -1025,160 +1264,47 @@ class ContributionGraph extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final workDataMap = _getWorkDataMap();
-    final today = DateTime.now();
-    final todayOnly = DateTime(today.year, today.month, today.day);
-    final oneYearAgo = todayOnly.subtract(const Duration(days: 365));
+    final counts = <DateTime, int>{};
+    final categories = <DateTime, String>{};
 
-    final startDayOffset = oneYearAgo.weekday % 7;
-    final totalDays =
-        todayOnly.difference(oneYearAgo).inDays + 1 + startDayOffset;
-    final totalWeeks = (totalDays / 7).ceil();
+    _workDataMap.forEach((date, entry) {
+      counts[date] = (entry['count'] as int?) ?? 0;
+      final category = entry['category'] as String?;
+      if (category != null) categories[date] = category;
+    });
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SizedBox(
-          height: 120,
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final cellSize = (constraints.maxHeight - (7 * 3)) / 7;
-
-              return SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                reverse: true,
-                child: Row(
-                  children: List.generate(totalWeeks, (weekIndex) {
-                    return Column(
-                      children: List.generate(7, (dayIndex) {
-                        final overallIndex = (weekIndex * 7) + dayIndex;
-
-                        if (overallIndex < startDayOffset) {
-                          return SizedBox(width: cellSize, height: cellSize);
-                        }
-
-                        final date = oneYearAgo.add(
-                          Duration(days: overallIndex - startDayOffset),
-                        );
-
-                        if (date.isAfter(todayOnly)) {
-                          return SizedBox(width: cellSize, height: cellSize);
-                        }
-
-                        return _buildCell(
-                          context,
-                          date,
-                          workDataMap,
-                          cellSize,
-                        )
-                            .animate()
-                            .fadeIn(
-                              delay: (overallIndex * 2).ms,
-                              duration: 400.ms,
-                            )
-                            .scale(
-                              delay: (overallIndex * 2).ms,
-                              duration: 400.ms,
-                              curve: Curves.elasticOut,
-                              begin: const Offset(0.5, 0.5),
-                            );
-                      }),
-                    );
-                  }),
-                ),
-              );
-            },
-          ),
-        ),
+        ChunkedContributionGrid(
+          counts: counts,
+          categories: categories,
+          colorFor: (day, count, category) =>
+              _getColorForCategory(context, count > 0 ? category : null),
+          tooltipFor: _tooltipFor,
+        ).animate().fadeIn(duration: 450.ms),
         const SizedBox(height: 12),
-        _buildMonthLabelsRow(oneYearAgo, startDayOffset, totalWeeks),
-        const SizedBox(height: 16),
         _buildLegend(context),
       ],
     );
   }
 
-  Widget _buildMonthLabelsRow(
-    DateTime startDate,
-    int startDayOffset,
-    int totalWeeks,
-  ) {
-    const monthAbbreviations = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-
-    final labels = <Widget>[];
-    int? lastMonth;
-    const double weekWidth = 15.0;
-
-    for (int i = 0; i < totalWeeks; i++) {
-      final date = startDate.add(Duration(days: (i * 7) - startDayOffset));
-
-      if (lastMonth == null || date.month != lastMonth) {
-        labels.add(
-          SizedBox(
-            width: weekWidth * 1.5,
-            child: Text(
-              monthAbbreviations[date.month - 1],
-              style: const TextStyle(fontSize: 10, color: Colors.grey),
-            ),
-          ),
-        );
-        lastMonth = date.month;
-      } else {
-        labels.add(const SizedBox(width: weekWidth));
-      }
-    }
-
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      reverse: true,
-      child: Row(children: labels),
-    );
-  }
-
-  Widget _buildCell(
-    BuildContext context,
-    DateTime date,
-    Map<DateTime, Map<String, dynamic>> workDataMap,
-    double size,
-  ) {
-    final dateOnly = DateTime(date.year, date.month, date.day);
-    final dayData = workDataMap[dateOnly];
+  String _tooltipFor(DateTime day) {
+    final normalized = DateTime(day.year, day.month, day.day);
+    final dayData = _workDataMap[normalized];
     final category = dayData?['category'] as String?;
     final count = dayData?['count'] as int? ?? 0;
-    final color = _getColorForCategory(context, category);
 
-    String tooltipMessage = '${date.day}-${date.month}-${date.year}\n';
+    final buffer = StringBuffer('${day.day}-${day.month}-${day.year}\n');
     if (count > 0 && category != null) {
-      tooltipMessage += '$count ${category.toLowerCase()} ${count == 1 ? 'task' : 'tasks'}';
+      buffer.write(
+        '$count ${category.toLowerCase()} ${count == 1 ? 'task' : 'tasks'}',
+      );
     } else {
-      tooltipMessage += 'No tasks';
+      buffer.write('No tasks');
     }
 
-    return Tooltip(
-      message: tooltipMessage,
-      child: Container(
-        width: size,
-        height: size,
-        margin: const EdgeInsets.all(1.5),
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(3),
-        ),
-      ),
-    );
+    return buffer.toString();
   }
 
   Widget _buildLegend(BuildContext context) {
