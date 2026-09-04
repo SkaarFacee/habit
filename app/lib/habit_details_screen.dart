@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'shared/chunked_contribution_grid.dart';
 import 'shared/neon_ribbon_background.dart';
 
 class HabitTaskEntry {
@@ -301,12 +302,6 @@ class HabitHeatmap extends StatelessWidget {
     required this.isDark,
   });
 
-  static const double _cell = 10;
-  static const double _gap = 3;
-  static const int _rows = 7;
-  static const double _monthLabelHeight = 16;
-  static const double _monthLabelGap = 6;
-
   Color _colorForCount(int count) {
     if (count <= 0) {
       return isDark ? Colors.white.withOpacity(0.06) : const Color(0xFFE9EDF3);
@@ -327,18 +322,6 @@ class HabitHeatmap extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final today = DateUtils.dateOnly(DateTime.now());
-    final firstVisibleDay = today.subtract(const Duration(days: 364));
-    final gridStart =
-        firstVisibleDay.subtract(Duration(days: firstVisibleDay.weekday % 7));
-    final totalDays = today.difference(gridStart).inDays + 1;
-    final totalWeeks = (totalDays / 7).ceil();
-
-    final columnWidth = _cell + _gap;
-    final contentWidth = totalWeeks * columnWidth;
-    final gridHeight = (_rows * (_cell + _gap)) - _gap;
-    final chartHeight = _monthLabelHeight + _monthLabelGap + gridHeight;
-
     final normalizedDates = <DateTime, int>{};
     dates.forEach((key, value) {
       normalizedDates[DateUtils.dateOnly(key)] = value;
@@ -359,29 +342,9 @@ class HabitHeatmap extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              reverse: true,
-              physics: const BouncingScrollPhysics(),
-              child: SizedBox(
-                width: contentWidth,
-                height: chartHeight,
-                child: CustomPaint(
-                  painter: _HeatmapPainter(
-                    dateCounts: normalizedDates,
-                    isDark: isDark,
-                    today: today,
-                    firstVisibleDay: firstVisibleDay,
-                    gridStart: gridStart,
-                    totalWeeks: totalWeeks,
-                    cell: _cell,
-                    gap: _gap,
-                    rows: _rows,
-                    monthLabelHeight: _monthLabelHeight,
-                    monthLabelGap: _monthLabelGap,
-                  ),
-                ),
-              ),
+            ChunkedContributionGrid(
+              counts: normalizedDates,
+              colorFor: (day, count, category) => _colorForCount(count),
             ),
             const SizedBox(height: 10),
             Wrap(
@@ -418,135 +381,6 @@ class HabitHeatmap extends StatelessWidget {
         ),
       ),
     );
-  }
-}
-
-class _HeatmapPainter extends CustomPainter {
-  final Map<DateTime, int> dateCounts;
-  final bool isDark;
-  final DateTime today;
-  final DateTime firstVisibleDay;
-  final DateTime gridStart;
-  final int totalWeeks;
-  final double cell;
-  final double gap;
-  final int rows;
-  final double monthLabelHeight;
-  final double monthLabelGap;
-
-  const _HeatmapPainter({
-    required this.dateCounts,
-    required this.isDark,
-    required this.today,
-    required this.firstVisibleDay,
-    required this.gridStart,
-    required this.totalWeeks,
-    required this.cell,
-    required this.gap,
-    required this.rows,
-    required this.monthLabelHeight,
-    required this.monthLabelGap,
-  });
-
-  static const List<String> _months = [
-    'Jan',
-    'Feb',
-    'Mar',
-    'Apr',
-    'May',
-    'Jun',
-    'Jul',
-    'Aug',
-    'Sep',
-    'Oct',
-    'Nov',
-    'Dec',
-  ];
-
-  Color _colorForCount(int count) {
-    if (count <= 0) {
-      return isDark ? Colors.white.withOpacity(0.06) : const Color(0xFFE9EDF3);
-    }
-
-    if (isDark) {
-      if (count == 1) return const Color(0xFF1D7AFC).withOpacity(0.45);
-      if (count == 2) return const Color(0xFF1D7AFC).withOpacity(0.65);
-      if (count == 3) return const Color(0xFF1D7AFC).withOpacity(0.82);
-      return const Color(0xFF63A4FF);
-    }
-
-    if (count == 1) return const Color(0xFFD6E8FF);
-    if (count == 2) return const Color(0xFFA9CEFF);
-    if (count == 3) return const Color(0xFF6FAEFF);
-    return const Color(0xFF1D7AFC);
-  }
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final columnWidth = cell + gap;
-    final gridTop = monthLabelHeight + monthLabelGap;
-    final textStyle = TextStyle(
-      fontSize: 10,
-      color: isDark ? Colors.white54 : Colors.black54,
-      fontWeight: FontWeight.w500,
-    );
-
-    final paint = Paint()..style = PaintingStyle.fill;
-
-    for (int weekIndex = 0; weekIndex < totalWeeks; weekIndex++) {
-      final weekDate = gridStart.add(Duration(days: weekIndex * 7));
-      final previousWeekDate =
-          weekIndex == 0 ? null : gridStart.add(Duration(days: (weekIndex - 1) * 7));
-
-      final showLabel = weekIndex == 0 ||
-          (previousWeekDate != null && weekDate.month != previousWeekDate.month);
-
-      if (showLabel) {
-        final tp = TextPainter(
-          text: TextSpan(
-            text: _months[weekDate.month - 1],
-            style: textStyle,
-          ),
-          textDirection: TextDirection.ltr,
-          maxLines: 1,
-        )..layout(maxWidth: columnWidth + 20);
-
-        tp.paint(canvas, Offset(weekIndex * columnWidth, 0));
-      }
-
-      for (int dayIndex = 0; dayIndex < rows; dayIndex++) {
-        final date = gridStart.add(Duration(days: weekIndex * 7 + dayIndex));
-        final isOutsideRange =
-            date.isBefore(firstVisibleDay) || date.isAfter(today);
-
-        if (isOutsideRange) continue;
-
-        final count = dateCounts[date] ?? 0;
-        paint.color = _colorForCount(count);
-
-        final rect = Rect.fromLTWH(
-          weekIndex * columnWidth,
-          gridTop + dayIndex * (cell + gap),
-          cell,
-          cell,
-        );
-
-        canvas.drawRRect(
-          RRect.fromRectAndRadius(rect, const Radius.circular(3)),
-          paint,
-        );
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _HeatmapPainter oldDelegate) {
-    return oldDelegate.dateCounts != dateCounts ||
-        oldDelegate.isDark != isDark ||
-        oldDelegate.today != today ||
-        oldDelegate.firstVisibleDay != firstVisibleDay ||
-        oldDelegate.gridStart != gridStart ||
-        oldDelegate.totalWeeks != totalWeeks;
   }
 }
 
