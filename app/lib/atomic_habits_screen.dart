@@ -37,7 +37,6 @@ class _AtomicHabitsScreenState extends State<AtomicHabitsScreen> {
   List<String> _globalHabits = [];
   List<String> _globalFavorites = [];
   Map<String, List<String>> _habitsByRoutine = {};
-  Map<String, List<String>> _favoritesByRoutine = {};
   List<String> _favorites = [];
 
   List<String> _combinedHabits = [];
@@ -114,8 +113,7 @@ class _AtomicHabitsScreenState extends State<AtomicHabitsScreen> {
         final globalHabits = _stringList(raw['habits']);
         final globalFavorites = _stringList(raw['favorites']);
 
-        // FIX:
-        // This reads BOTH:
+        // Reads BOTH formats:
         // 1) nested map format:
         //    habits_by_routine: { Productivity: [...] }
         // 2) dotted legacy/top-level format:
@@ -123,10 +121,6 @@ class _AtomicHabitsScreenState extends State<AtomicHabitsScreen> {
         final habitsByRoutine = _readRoutineListMapFromRaw(
           raw: raw,
           rootField: 'habits_by_routine',
-        );
-        final favoritesByRoutine = _readRoutineListMapFromRaw(
-          raw: raw,
-          rootField: 'favorites_by_routine',
         );
 
         final routineName = _activeRoutine;
@@ -136,20 +130,12 @@ class _AtomicHabitsScreenState extends State<AtomicHabitsScreen> {
           habitsByRoutine: habitsByRoutine,
         );
 
-        final favorites = _routineFavoritesFor(
-          routineName: routineName,
-          globalFavorites: globalFavorites,
-          screenHabits: screenHabits,
-          favoritesByRoutine: favoritesByRoutine,
-        );
-
         setState(() {
           _globalHabits = globalHabits;
           _globalFavorites = globalFavorites;
           _habitsByRoutine = habitsByRoutine;
-          _favoritesByRoutine = favoritesByRoutine;
           _screenHabits = screenHabits;
-          _favorites = favorites;
+          _favorites = globalFavorites;
           _habitsLoaded = true;
           _recomputeHabitLists();
         });
@@ -329,26 +315,6 @@ class _AtomicHabitsScreenState extends State<AtomicHabitsScreen> {
     return List<String>.from(
       key == null ? const [] : habitsByRoutine[key] ?? const [],
     );
-  }
-
-  List<String> _routineFavoritesFor({
-    required String? routineName,
-    required List<String> globalFavorites,
-    required List<String> screenHabits,
-    required Map<String, List<String>> favoritesByRoutine,
-  }) {
-    if (routineName == null) {
-      return globalFavorites;
-    }
-
-    final key = _matchingRoutineKey(favoritesByRoutine, routineName);
-    final routineFavorites = List<String>.from(
-      key == null ? const [] : favoritesByRoutine[key] ?? const [],
-    );
-
-    return routineFavorites
-        .where((favorite) => _containsHabit(screenHabits, favorite))
-        .toList(growable: false);
   }
 
   Map<String, dynamic>? _asMap(dynamic value) {
@@ -624,46 +590,20 @@ class _AtomicHabitsScreenState extends State<AtomicHabitsScreen> {
       await FirebaseFirestore.instance.runTransaction((tx) async {
         final habitsSnap = await tx.get(_atomicHabitsRef);
         final raw = Map<String, dynamic>.from(habitsSnap.data() ?? {});
-        final routineName = _activeRoutine;
 
-        if (routineName != null) {
-          final favoritesByRoutine = _readRoutineListMapFromRaw(
-            raw: raw,
-            rootField: 'favorites_by_routine',
-          );
-          final routineKey =
-              _matchingRoutineKey(favoritesByRoutine, routineName) ?? routineName;
-          final favorites =
-              List<String>.from(favoritesByRoutine[routineKey] ?? const []);
+        final favorites = _stringList(raw['favorites']);
 
-          if (_containsHabit(favorites, habit)) {
-            favorites.removeWhere((h) => _sameHabit(h, habit));
-          } else {
-            favorites.add(habit);
-          }
-
-          tx.set(
-            _atomicHabitsRef,
-            {
-              'favorites_by_routine.$routineKey': _dedupeStrings(favorites),
-            },
-            SetOptions(merge: true),
-          );
+        if (_containsHabit(favorites, habit)) {
+          favorites.removeWhere((h) => _sameHabit(h, habit));
         } else {
-          final favorites = _stringList(raw['favorites']);
-
-          if (_containsHabit(favorites, habit)) {
-            favorites.removeWhere((h) => _sameHabit(h, habit));
-          } else {
-            favorites.add(habit);
-          }
-
-          tx.set(
-            _atomicHabitsRef,
-            {'favorites': _dedupeStrings(favorites)},
-            SetOptions(merge: true),
-          );
+          favorites.add(habit);
         }
+
+        tx.set(
+          _atomicHabitsRef,
+          {'favorites': _dedupeStrings(favorites)},
+          SetOptions(merge: true),
+        );
       });
 
       final localFavorites = List<String>.from(_favorites);
@@ -676,21 +616,7 @@ class _AtomicHabitsScreenState extends State<AtomicHabitsScreen> {
       if (!mounted) return false;
       setState(() {
         _favorites = _dedupeStrings(localFavorites);
-
-        if (_activeRoutine != null) {
-          final routineKey = _matchingRoutineKey(
-                _favoritesByRoutine,
-                _activeRoutine!,
-              ) ??
-              _activeRoutine!;
-          _favoritesByRoutine = {
-            ..._favoritesByRoutine,
-            routineKey: List<String>.from(_favorites),
-          };
-        } else {
-          _globalFavorites = List<String>.from(_favorites);
-        }
-
+        _globalFavorites = List<String>.from(_favorites);
         _recomputeHabitLists();
       });
 
@@ -729,10 +655,6 @@ class _AtomicHabitsScreenState extends State<AtomicHabitsScreen> {
           raw: habitsData,
           rootField: 'habits_by_routine',
         );
-        final favoritesByRoutine = _readRoutineListMapFromRaw(
-          raw: habitsData,
-          rootField: 'favorites_by_routine',
-        );
 
         final updatedTracker = _rewriteTracker(trackerData, oldName, trimmed);
         final updatedHabits = _replaceInList(
@@ -750,11 +672,6 @@ class _AtomicHabitsScreenState extends State<AtomicHabitsScreen> {
           oldName: oldName,
           newName: trimmed,
         );
-        final updatedFavoritesByRoutine = _replaceInListMap(
-          source: favoritesByRoutine,
-          oldName: oldName,
-          newName: trimmed,
-        );
 
         tx.set(_trackerRef, updatedTracker);
         tx.set(
@@ -763,7 +680,6 @@ class _AtomicHabitsScreenState extends State<AtomicHabitsScreen> {
             'habits': updatedHabits,
             'favorites': updatedFavorites,
             'habits_by_routine': updatedHabitsByRoutine,
-            'favorites_by_routine': updatedFavoritesByRoutine,
           },
           SetOptions(merge: true),
         );
@@ -781,11 +697,6 @@ class _AtomicHabitsScreenState extends State<AtomicHabitsScreen> {
         oldName: oldName,
         newName: trimmed,
       );
-      final updatedFavoritesByRoutine = _replaceInListMap(
-        source: _favoritesByRoutine,
-        oldName: oldName,
-        newName: trimmed,
-      );
       final updatedGlobalFavorites = _replaceInList(
         source: _globalFavorites,
         oldName: oldName,
@@ -796,12 +707,6 @@ class _AtomicHabitsScreenState extends State<AtomicHabitsScreen> {
         globalHabits: updatedGlobalHabits,
         habitsByRoutine: updatedHabitsByRoutine,
       );
-      final updatedScreenFavorites = _routineFavoritesFor(
-        routineName: _activeRoutine,
-        globalFavorites: updatedGlobalFavorites,
-        screenHabits: updatedScreenHabits,
-        favoritesByRoutine: updatedFavoritesByRoutine,
-      );
 
       if (!mounted) return false;
       setState(() {
@@ -811,9 +716,8 @@ class _AtomicHabitsScreenState extends State<AtomicHabitsScreen> {
         _globalHabits = updatedGlobalHabits;
         _globalFavorites = updatedGlobalFavorites;
         _habitsByRoutine = updatedHabitsByRoutine;
-        _favoritesByRoutine = updatedFavoritesByRoutine;
         _screenHabits = updatedScreenHabits;
-        _favorites = updatedScreenFavorites;
+        _favorites = updatedGlobalFavorites;
         _recomputeHabitLists();
       });
 
@@ -850,10 +754,6 @@ class _AtomicHabitsScreenState extends State<AtomicHabitsScreen> {
           raw: habitsData,
           rootField: 'habits_by_routine',
         );
-        final favoritesByRoutine = _readRoutineListMapFromRaw(
-          raw: habitsData,
-          rootField: 'favorites_by_routine',
-        );
 
         final updatedTracker = _rewriteTracker(trackerData, fromHabit, intoHabit);
         final updatedHabits = _replaceInList(
@@ -871,11 +771,6 @@ class _AtomicHabitsScreenState extends State<AtomicHabitsScreen> {
           oldName: fromHabit,
           newName: intoHabit,
         );
-        final updatedFavoritesByRoutine = _replaceInListMap(
-          source: favoritesByRoutine,
-          oldName: fromHabit,
-          newName: intoHabit,
-        );
 
         tx.set(_trackerRef, updatedTracker);
         tx.set(
@@ -884,7 +779,6 @@ class _AtomicHabitsScreenState extends State<AtomicHabitsScreen> {
             'habits': updatedHabits,
             'favorites': updatedFavorites,
             'habits_by_routine': updatedHabitsByRoutine,
-            'favorites_by_routine': updatedFavoritesByRoutine,
           },
           SetOptions(merge: true),
         );
@@ -902,11 +796,6 @@ class _AtomicHabitsScreenState extends State<AtomicHabitsScreen> {
         oldName: fromHabit,
         newName: intoHabit,
       );
-      final updatedFavoritesByRoutine = _replaceInListMap(
-        source: _favoritesByRoutine,
-        oldName: fromHabit,
-        newName: intoHabit,
-      );
       final updatedGlobalFavorites = _replaceInList(
         source: _globalFavorites,
         oldName: fromHabit,
@@ -917,12 +806,6 @@ class _AtomicHabitsScreenState extends State<AtomicHabitsScreen> {
         globalHabits: updatedGlobalHabits,
         habitsByRoutine: updatedHabitsByRoutine,
       );
-      final updatedScreenFavorites = _routineFavoritesFor(
-        routineName: _activeRoutine,
-        globalFavorites: updatedGlobalFavorites,
-        screenHabits: updatedScreenHabits,
-        favoritesByRoutine: updatedFavoritesByRoutine,
-      );
 
       if (!mounted) return false;
       setState(() {
@@ -932,9 +815,8 @@ class _AtomicHabitsScreenState extends State<AtomicHabitsScreen> {
         _globalHabits = updatedGlobalHabits;
         _globalFavorites = updatedGlobalFavorites;
         _habitsByRoutine = updatedHabitsByRoutine;
-        _favoritesByRoutine = updatedFavoritesByRoutine;
         _screenHabits = updatedScreenHabits;
-        _favorites = updatedScreenFavorites;
+        _favorites = updatedGlobalFavorites;
         _recomputeHabitLists();
       });
 
@@ -1180,8 +1062,8 @@ class _AtomicHabitsScreenState extends State<AtomicHabitsScreen> {
     final subtitle = _isRoutineMode
         ? _isOtherRoutineName(_activeRoutine)
             ? 'There are currently no unassigned habits.'
-            : 'Add habits to "${_activeRoutine ?? 'this routine'}" from the routines screen.'
-        : 'Try a different search or add more habits to Firestore.';
+            : 'Habits are grouped into routines automatically by the daily pipeline.'
+        : 'Try a different search. Habits appear automatically as the pipeline tags your tasks.';
 
     return Center(
       child: Padding(
