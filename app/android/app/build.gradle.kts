@@ -13,6 +13,18 @@ android {
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
+    // The home_widget plugin depends on `androidx.glance:glance-appwidget:1.+`
+    // for its optional Glance helpers. The latest alpha requires AGP 9.1, so we
+    // pin a stable glance line that works with the AGP used here. The app's own
+    // widget receiver is a plain AppWidgetProvider and never touches glance.
+    configurations.all {
+        resolutionStrategy {
+            force(
+                "androidx.glance:glance-appwidget:1.1.1",
+                "androidx.glance:glance:1.1.1",
+            )
+        }
+    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
