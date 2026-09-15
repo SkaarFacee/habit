@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">TrackIt</string>
+    <string name="widget_refresh_label">Refresh widget</string>
+    <string name="widget_description">Your heatmap, streak and today\'s count</string>
+</resources>
