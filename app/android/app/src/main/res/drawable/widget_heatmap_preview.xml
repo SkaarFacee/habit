@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Static preview of the heatmap home-screen widget: dark card, streak
+     and today pills, and a GitHub-style 6-month heatmap grid. Used by the
+     widget picker (previewImage) and as the default widget source until the
+     Flutter app renders the real heatmap PNG. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="320dp"
+    android:height="160dp"
+    android:viewportWidth="320"
+    android:viewportHeight="160">
+
+    <!-- Card background -->
+    <path
+        android:fillColor="#FF171717"
+        android:pathData="M24,0 H296 A24,24 0 0 1 320,24 V136 A24,24 0 0 1 296,160 H24 A24,24 0 0 1 0,136 V24 A24,24 0 0 1 24,0 Z" />
+
+    <!-- Current-streak pill -->
+    <path
+        android:fillColor="#14FFFFFF"
+        android:pathData="M28,16 H108 A12,12 0 0 1 120,28 A12,12 0 0 1 108,40 H28 A12,12 0 0 1 16,28 A12,12 0 0 1 28,16 Z" />
+    <path
+        android:fillColor="#FFFF9F0A"
+        android:pathData="M24,28 a8,8 0 1 0 16,0 a8,8 0 1 0 -16,0 z" />
+    <path
+        android:fillColor="#3DFFFFFF"
+        android:pathData="M32,24 H80 A4,4 0 0 1 84,28 A4,4 0 0 1 80,32 H32 A4,4 0 0 1 28,28 A4,4 0 0 1 32,24 Z" />
+
+    <!-- Tasks-today pill -->
+    <path
+        android:fillColor="#14FFFFFF"
+        android:pathData="M228,16 H292 A12,12 0 0 1 304,28 A12,12 0 0 1 292,40 H228 A12,12 0 0 1 216,28 A12,12 0 0 1 228,16 Z" />
+    <path
+        android:fillColor="#3DFFFFFF"
+        android:pathData="M264,24 H292 A4,4 0 0 1 296,28 A4,4 0 0 1 292,32 H264 A4,4 0 0 1 260,28 A4,4 0 0 1 264,24 Z" />
+
+    <!-- Heatmap grid: empty cells -->
+    <path
+        android:fillColor="#14FFFFFF"
+        android:pathData="M36,60h11v11h-11z M36,102h11v11h-11z M36,144h11v11h-11z M50,74h11v11h-11z M50,130h11v11h-11z M64,88h11v11h-11z M78,60h11v11h-11z M78,116h11v11h-11z M92,102h11v11h-11z M92,144h11v11h-11z M106,116h11v11h-11z M120,74h11v11h-11z M120,130h11v11h-11z M134,60h11v11h-11z M134,144h11v11h-11z M148,102h11v11h-11z M162,88h11v11h-11z M176,60h11v11h-11z M176,130h11v11h-11z M190,116h11v11h-11z M204,88h11v11h-11z M218,74h11v11h-11z M218,144h11v11h-11z M232,60h11v11h-11z M232,130h11v11h-11z M246,102h11v11h-11z M260,74h11v11h-11z M260,144h11v11h-11z M274,116h11v11h-11z" />
+
+    <!-- Heatmap grid: intensity 1 -->
+    <path
+        android:fillColor="#731D7AFC"
+        android:pathData="M36,88h11v11h-11z M50,60h11v11h-11z M50,116h11v11h-11z M64,102h11v11h-11z M64,144h11v11h-11z M78,74h11v11h-11z M92,88h11v11h-11z M92,130h11v11h-11z M106,102h11v11h-11z M120,60h11v11h-11z M120,144h11v11h-11z M134,88h11v11h-11z M148,74h11v11h-11z M148,130h11v11h-11z M162,116h11v11h-11z M176,102h11v11h-11z M176,144h11v11h-11z M190,74h11v11h-11z M204,60h11v11h-11z M204,130h11v11h-11z M218,102h11v11h-11z M232,88h11v11h-11z M246,116h11v11h-11z M246,144h11v11h-11z M260,60h11v11h-11z M274,88h11v11h-11z" />
+
+    <!-- Heatmap grid: intensity 2 -->
+    <path
+        android:fillColor="#A61D7AFC"
+        android:pathData="M36,74h11v11h-11z M36,130h11v11h-11z M50,88h11v11h-11z M50,144h11v11h-11z M64,74h11v11h-11z M78,102h11v11h-11z M78,144h11v11h-11z M92,60h11v11h-11z M106,88h11v11h-11z M106,130h11v11h-11z M120,116h11v11h-11z M134,116h11v11h-11z M148,60h11v11h-11z M148,144h11v11h-11z M162,102h11v11h-11z M176,74h11v11h-11z M190,88h11v11h-11z M190,130h11v11h-11z M204,116h11v11h-11z M218,60h11v11h-11z M232,102h11v11h-11z M232,144h11v11h-11z M246,74h11v11h-11z M260,88h11v11h-11z M260,130h11v11h-11z M274,102h11v11h-11z" />
+
+    <!-- Heatmap grid: intensity 3 -->
+    <path
+        android:fillColor="#D91D7AFC"
+        android:pathData="M36,116h11v11h-11z M50,102h11v11h-11z M64,60h11v11h-11z M64,130h11v11h-11z M78,88h11v11h-11z M92,116h11v11h-11z M106,74h11v11h-11z M106,144h11v11h-11z M120,102h11v11h-11z M134,74h11v11h-11z M134,130h11v11h-11z M148,88h11v11h-11z M162,60h11v11h-11z M162,144h11v11h-11z M176,116h11v11h-11z M190,102h11v11h-11z M204,74h11v11h-11z M204,144h11v11h-11z M218,88h11v11h-11z M218,130h11v11h-11z M232,116h11v11h-11z M246,60h11v11h-11z M260,102h11v11h-11z M274,74h11v11h-11z M274,130h11v11h-11z" />
+
+    <!-- Heatmap grid: intensity 4 -->
+    <path
+        android:fillColor="#FF63A4FF"
+        android:pathData="M64,116h11v11h-11z M78,130h11v11h-11z M92,74h11v11h-11z M106,60h11v11h-11z M120,88h11v11h-11z M134,102h11v11h-11z M148,116h11v11h-11z M162,74h11v11h-11z M162,130h11v11h-11z M176,88h11v11h-11z M190,60h11v11h-11z M190,144h11v11h-11z M204,102h11v11h-11z M218,116h11v11h-11z M232,74h11v11h-11z M246,88h11v11h-11z M246,130h11v11h-11z M260,116h11v11h-11z M274,60h11v11h-11z M274,144h11v11h-11z" />
+</vector>
