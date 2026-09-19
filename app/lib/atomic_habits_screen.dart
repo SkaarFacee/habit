@@ -1181,6 +1181,7 @@ class _CompactHabitCardState extends State<_CompactHabitCard> {
 
   @override
   Widget build(BuildContext context) {
+    // Opaque card surface (see insights_screen._cardDecoration).
     final cardColor = widget.isDark ? const Color(0xFF15171C) : Colors.white;
     final subtitleColor = widget.isDark ? Colors.white60 : Colors.black54;
 
@@ -1188,7 +1189,7 @@ class _CompactHabitCardState extends State<_CompactHabitCard> {
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: cardColor.withOpacity(0.95),
+          color: cardColor,
           borderRadius: BorderRadius.circular(22),
           border: Border.all(
             color:
@@ -1448,9 +1449,7 @@ class _SearchBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fillColor = isDark
-        ? const Color(0xFF15171C).withOpacity(0.94)
-        : Colors.white.withOpacity(0.94);
+    final fillColor = isDark ? const Color(0xFF15171C) : Colors.white;
 
     return RepaintBoundary(
       child: Container(
