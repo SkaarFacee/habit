@@ -127,32 +127,36 @@ class _InsightsScreenState extends State<InsightsScreen> {
         ? Colors.white.withOpacity(0.2)
         : Colors.grey.shade50;
 
-    return Padding(
-          padding: const EdgeInsets.only(top: 8),
-          child: Column(
-            children: [
-              Container(
-                height: 110,
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: base,
-                  borderRadius: BorderRadius.circular(22),
+    // RepaintBoundary keeps the looping shimmer from repainting the static
+    // aurora and anything else beneath it.
+    return RepaintBoundary(
+      child: Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Column(
+              children: [
+                Container(
+                  height: 110,
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: base,
+                    borderRadius: BorderRadius.circular(22),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 16),
-              Container(
-                height: 220,
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: base,
-                  borderRadius: BorderRadius.circular(22),
+                const SizedBox(height: 16),
+                Container(
+                  height: 220,
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: base,
+                    borderRadius: BorderRadius.circular(22),
+                  ),
                 ),
-              ),
-            ],
-          ),
-        )
-        .animate(onPlay: (controller) => controller.repeat())
-        .shimmer(duration: 1200.ms, color: highlight);
+              ],
+            ),
+          )
+          .animate(onPlay: (controller) => controller.repeat())
+          .shimmer(duration: 1200.ms, color: highlight),
+    );
   }
 
   Widget _buildSections(
@@ -191,9 +195,9 @@ class _InsightsScreenState extends State<InsightsScreen> {
         ),
       ),
       _InsightCard(
-        title: 'Top tasks',
+        title: 'Top habits',
         isDark: isDark,
-        child: _TopTasksList(report: report, isDark: isDark),
+        child: _TopHabitsList(report: report, isDark: isDark),
       ),
     ];
 
@@ -339,25 +343,18 @@ class _InsightsScreenState extends State<InsightsScreen> {
       child: Column(
         children: [
           Container(
-                width: 96,
-                height: 96,
-                decoration: BoxDecoration(
-                  color: accent.withOpacity(0.08),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  Icons.query_stats_rounded,
-                  size: 42,
-                  color: accent.withOpacity(0.7),
-                ),
-              )
-              .animate(onPlay: (c) => c.repeat(reverse: true))
-              .scale(
-                begin: const Offset(1, 1),
-                end: const Offset(1.06, 1.06),
-                duration: 1600.ms,
-                curve: Curves.easeInOut,
-              ),
+            width: 96,
+            height: 96,
+            decoration: BoxDecoration(
+              color: accent.withOpacity(0.08),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              Icons.query_stats_rounded,
+              size: 42,
+              color: accent.withOpacity(0.7),
+            ),
+          ),
           const SizedBox(height: 20),
           Text(
             'No activity yet',
@@ -663,24 +660,27 @@ class _InsightCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: _cardDecoration(isDark),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title.toUpperCase(),
-            style: TextStyle(
-              fontSize: 11.5,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 1.2,
-              color: accentFor(isDark),
+    // Charts repaint on touch/data changes; a boundary keeps that local.
+    return RepaintBoundary(
+      child: Container(
+        padding: const EdgeInsets.all(18),
+        decoration: _cardDecoration(isDark),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title.toUpperCase(),
+              style: TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 1.2,
+                color: accentFor(isDark),
+              ),
             ),
-          ),
-          const SizedBox(height: 14),
-          child,
-        ],
+            const SizedBox(height: 14),
+            child,
+          ],
+        ),
       ),
     );
   }
@@ -1275,25 +1275,25 @@ class _DifficultyBar extends StatelessWidget {
   }
 }
 
-/// Ranked top-tasks list with medal badges.
-class _TopTasksList extends StatelessWidget {
+/// Ranked top-habits list with medal badges.
+class _TopHabitsList extends StatelessWidget {
   final InsightsReport report;
   final bool isDark;
 
-  const _TopTasksList({required this.report, required this.isDark});
+  const _TopHabitsList({required this.report, required this.isDark});
 
   @override
   Widget build(BuildContext context) {
-    if (report.topTasks.isEmpty) {
+    if (report.topHabits.isEmpty) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 18),
-        child: _chartEmptyLabel(isDark, 'No tasks logged in this range'),
+        child: _chartEmptyLabel(isDark, 'No habits logged in this range'),
       );
     }
 
     return Column(
       children: [
-        for (int i = 0; i < report.topTasks.length; i++)
+        for (int i = 0; i < report.topHabits.length; i++)
           Padding(
                 padding: const EdgeInsets.only(bottom: 10),
                 child: Row(
@@ -1302,7 +1302,7 @@ class _TopTasksList extends StatelessWidget {
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
-                        report.topTasks[i].title,
+                        report.topHabits[i].habit,
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
@@ -1322,7 +1322,7 @@ class _TopTasksList extends StatelessWidget {
                         borderRadius: BorderRadius.circular(100),
                       ),
                       child: Text(
-                        '×${report.topTasks[i].count}',
+                        '×${report.topHabits[i].count}',
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w700,
@@ -1387,9 +1387,9 @@ class _RankBadge extends StatelessWidget {
 // --- Shared helpers ---
 
 Decoration _cardDecoration(bool isDark) => BoxDecoration(
-  color: (isDark ? const Color(0xFF1E1E1E) : Colors.white).withOpacity(
-    isDark ? 0.88 : 0.96,
-  ),
+  // Opaque surfaces: translucent fills previously blended against the
+  // animated background every frame; solid colors rasterize once and cache.
+  color: isDark ? const Color(0xFF1D1D1D) : Colors.white,
   borderRadius: BorderRadius.circular(22),
   border: Border.all(
     color: isDark ? Colors.white12 : Colors.black.withOpacity(0.06),
