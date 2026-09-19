@@ -304,9 +304,9 @@ class _RoutinesScreenState extends State<RoutinesScreen> {
   }
 
   Widget _buildHeaderCard(bool isDark) {
-    final surface = isDark
-        ? const Color(0xFF15171C).withOpacity(0.92)
-        : Colors.white.withOpacity(0.92);
+    // Opaque surfaces rasterize once and cache; translucent fills used to
+    // blend against the animated background every frame.
+    final surface = isDark ? const Color(0xFF15171C) : Colors.white;
 
     final subtitleColor = isDark ? Colors.white70 : Colors.black54;
 
@@ -431,9 +431,7 @@ class _RoutinesScreenState extends State<RoutinesScreen> {
   }
 
   Widget _buildEmptyState(bool isDark) {
-    final surface = isDark
-        ? const Color(0xFF15171C).withOpacity(0.92)
-        : Colors.white.withOpacity(0.92);
+    final surface = isDark ? const Color(0xFF15171C) : Colors.white;
 
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
@@ -526,9 +524,7 @@ class _RoutinesScreenState extends State<RoutinesScreen> {
     final icon = isOther ? Icons.category_outlined : icons[index % icons.length];
     final habitCount = _habitsByRoutine[routine]?.length ?? 0;
 
-    final surface = isDark
-        ? const Color(0xFF15171C).withOpacity(0.96)
-        : Colors.white.withOpacity(0.97);
+    final surface = isDark ? const Color(0xFF15171C) : Colors.white;
 
     return KeyedSubtree(
       key: ValueKey(
