@@ -177,21 +177,25 @@ class ShellPageState extends State<ShellPage>
 
   @override
   Widget build(BuildContext context) {
-    return IgnorePointer(
-      ignoring: !widget.visible,
-      child: AnimatedBuilder(
-        animation: _controller,
-        builder: (context, child) {
-          final t = Motion.emphasizedCurve.transform(_controller.value);
-          return Opacity(
-            opacity: t,
-            child: Transform.translate(
-              offset: Offset(0, (1 - t) * 12),
-              child: child,
-            ),
-          );
-        },
-        child: widget.child,
+    // RepaintBoundary keeps the cross-fade's translate/opacity from dirtying
+    // sibling pages (and their rasters) during tab switches.
+    return RepaintBoundary(
+      child: IgnorePointer(
+        ignoring: !widget.visible,
+        child: AnimatedBuilder(
+          animation: _controller,
+          builder: (context, child) {
+            final t = Motion.emphasizedCurve.transform(_controller.value);
+            return Opacity(
+              opacity: t,
+              child: Transform.translate(
+                offset: Offset(0, (1 - t) * 12),
+                child: child,
+              ),
+            );
+          },
+          child: widget.child,
+        ),
       ),
     );
   }
@@ -221,6 +225,13 @@ class WorkTrackerScreenState extends State<WorkTrackerScreen> {
   AppStats? _lastStats;
   Map<DateTime, int> _lastDailyCounts = const {};
   Map<String, dynamic>? _processedData;
+
+  // Stable instances for rendering: the stream builder hands out a fresh map
+  // per snapshot, so content is built from these cached references instead —
+  // identical across unrelated rebuilds (theme flips, setState, haptics),
+  // which keeps ContributionGraph from re-parsing its grid every build.
+  Map<String, dynamic> _renderTracker = const {};
+  List<String>? _renderListNames;
 
   // Widget pin onboarding card.
   bool _showPinWidgetCard = false;
@@ -273,7 +284,9 @@ class WorkTrackerScreenState extends State<WorkTrackerScreen> {
     _processedData = data;
     _lastTracker = data;
 
-    final tracker = (data['Tracker'] as Map<String, dynamic>?) ?? {};
+    final tracker = (data['Tracker'] as Map<String, dynamic>?) ?? const {};
+    _renderTracker = tracker;
+    _renderListNames = tracker.keys.toList();
     _publishTrackerData(data);
     final stats = computeAppStats(tracker);
     _lastStats = stats;
@@ -392,12 +405,14 @@ class WorkTrackerScreenState extends State<WorkTrackerScreen> {
               builder: (context, snapshot) {
                 _buildTrackerStream(snapshot);
 
-                if (snapshot.hasData && snapshot.data!.exists) {
-                  final data = snapshot.data!.data() ?? {};
-                  final trackerData =
-                      (data['Tracker'] as Map<String, dynamic>?) ?? {};
-                  final listNames = trackerData.keys.toList();
-                  return _buildContent(context, trackerData, listNames);
+                if (snapshot.hasData &&
+                    snapshot.data!.exists &&
+                    _renderListNames != null) {
+                  return _buildContent(
+                    context,
+                    _renderTracker,
+                    _renderListNames!,
+                  );
                 }
 
                 // Offline / waiting / missing-doc fallbacks.
@@ -484,32 +499,36 @@ class WorkTrackerScreenState extends State<WorkTrackerScreen> {
         ? Colors.white.withOpacity(0.2)
         : Colors.grey.shade50;
 
-    return Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            children: [
-              Container(
-                height: 230,
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: baseColor,
-                  borderRadius: BorderRadius.circular(20),
+    // RepaintBoundary keeps the looping shimmer from repainting the static
+    // aurora and anything else beneath it.
+    return RepaintBoundary(
+      child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                Container(
+                  height: 230,
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: baseColor,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 24),
-              Container(
-                height: 400,
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: baseColor,
-                  borderRadius: BorderRadius.circular(16),
+                const SizedBox(height: 24),
+                Container(
+                  height: 400,
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: baseColor,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
                 ),
-              ),
-            ],
-          ),
-        )
-        .animate(onPlay: (controller) => controller.repeat())
-        .shimmer(duration: 1200.ms, color: highlightColor);
+              ],
+            ),
+          )
+          .animate(onPlay: (controller) => controller.repeat())
+          .shimmer(duration: 1200.ms, color: highlightColor),
+    );
   }
 
   Widget _buildErrorState() {
@@ -614,7 +633,8 @@ class WorkTrackerScreenState extends State<WorkTrackerScreen> {
     }
 
     final workListCards = listNames.map((listName) {
-      final listData = trackerData[listName] as Map<String, dynamic>? ?? {};
+      final listData =
+          trackerData[listName] as Map<String, dynamic>? ?? const {};
       return Padding(
         padding: const EdgeInsets.only(bottom: 24),
         child: WorkListCard(title: listName, data: listData),
@@ -709,9 +729,7 @@ class WorkTrackerScreenState extends State<WorkTrackerScreen> {
     final stats = _statsFor(tracker);
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    final cardColor = isDark
-        ? const Color(0xFF1E1E1E).withOpacity(0.88)
-        : Colors.white.withOpacity(0.96);
+    final cardColor = isDark ? const Color(0xFF1D1D1D) : Colors.white;
 
     final primaryAccent = isDark
         ? const Color(0xFFE84545)
@@ -1147,43 +1165,43 @@ class WorkListCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Container(
-      decoration: BoxDecoration(
-        color: (isDark ? const Color(0xFF1E1E1E) : Colors.white).withOpacity(
-          0.88,
-        ),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isDark ? Colors.white12 : Colors.black.withOpacity(0.05),
-        ),
-        boxShadow: isDark
-            ? null
-            : [
-                BoxShadow(
-                  color: Colors.grey.withOpacity(0.1),
-                  blurRadius: 20,
-                  offset: const Offset(0, 5),
-                ),
-              ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildHeader(context),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
-            child: ContributionGraph(data: data),
+    return RepaintBoundary(
+      child: Container(
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF1D1D1D) : Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isDark ? Colors.white12 : Colors.black.withOpacity(0.05),
           ),
-          if (_getRecentWorkEntries().isNotEmpty) ...[
-            Divider(
-              height: 1,
-              indent: 20,
-              endIndent: 20,
-              color: isDark ? Colors.white12 : Colors.grey.shade200,
+          boxShadow: isDark
+              ? null
+              : [
+                  BoxShadow(
+                    color: Colors.grey.withOpacity(0.1),
+                    blurRadius: 20,
+                    offset: const Offset(0, 5),
+                  ),
+                ],
+        ),
+      child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildHeader(context),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
+              child: ContributionGraph(data: data),
             ),
-            _buildRecentWork(context),
+            if (_getRecentWorkEntries().isNotEmpty) ...[
+              Divider(
+                height: 1,
+                indent: 20,
+                endIndent: 20,
+                color: isDark ? Colors.white12 : Colors.grey.shade200,
+              ),
+              _buildRecentWork(context),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -1373,20 +1391,41 @@ class ContributionGraph extends StatefulWidget {
 }
 
 class _ContributionGraphState extends State<ContributionGraph> {
-  late Map<DateTime, Map<String, dynamic>> _workDataMap;
+  Map<DateTime, Map<String, dynamic>> _workDataMap = const {};
+  Map<DateTime, int> _counts = const {};
+  Map<DateTime, String> _categories = const {};
+  Map<String, dynamic>? _parsedFrom;
 
   @override
   void initState() {
     super.initState();
-    _workDataMap = _getWorkDataMap();
+    _parseData();
   }
 
   @override
   void didUpdateWidget(ContributionGraph oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.data != widget.data) {
-      _workDataMap = _getWorkDataMap();
-    }
+    _parseData();
+  }
+
+  /// Re-parses only when the raw data instance actually changes. The parent
+  /// passes stable tracker map instances across unrelated rebuilds, so theme
+  /// flips / setState no longer re-parse the whole year and rebuild ~180
+  /// heatmap cells.
+  void _parseData() {
+    if (identical(_parsedFrom, widget.data)) return;
+    _parsedFrom = widget.data;
+    _workDataMap = _getWorkDataMap();
+
+    final counts = <DateTime, int>{};
+    final categories = <DateTime, String>{};
+    _workDataMap.forEach((date, entry) {
+      counts[date] = (entry['count'] as int?) ?? 0;
+      final category = entry['category'] as String?;
+      if (category != null) categories[date] = category;
+    });
+    _counts = counts;
+    _categories = categories;
   }
 
   DateTime _parseDate(String dateStr) {
@@ -1443,24 +1482,17 @@ class _ContributionGraphState extends State<ContributionGraph> {
 
   @override
   Widget build(BuildContext context) {
-    final counts = <DateTime, int>{};
-    final categories = <DateTime, String>{};
-
-    _workDataMap.forEach((date, entry) {
-      counts[date] = (entry['count'] as int?) ?? 0;
-      final category = entry['category'] as String?;
-      if (category != null) categories[date] = category;
-    });
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        ChunkedContributionGrid(
-          counts: counts,
-          categories: categories,
-          colorFor: (day, count, category) =>
-              _getColorForCategory(context, count > 0 ? category : null),
-          tooltipFor: _tooltipFor,
+        RepaintBoundary(
+          child: ChunkedContributionGrid(
+            counts: _counts,
+            categories: _categories,
+            colorFor: (day, count, category) =>
+                _getColorForCategory(context, count > 0 ? category : null),
+            tooltipFor: _tooltipFor,
+          ),
         ).animate().fadeIn(duration: 450.ms),
         const SizedBox(height: 12),
         _buildLegend(context),
