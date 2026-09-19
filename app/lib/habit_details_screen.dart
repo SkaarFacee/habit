@@ -99,7 +99,7 @@ class HabitDetailsScreen extends StatelessWidget {
                       child: Container(
                         padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
-                          color: cardColor.withOpacity(0.95),
+                          color: cardColor,
                           borderRadius: BorderRadius.circular(26),
                           border: Border.all(
                             color: isDark
@@ -425,8 +425,7 @@ class _HabitTaskTile extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color:
-              (isDark ? const Color(0xFF15171C) : Colors.white).withOpacity(0.95),
+          color: isDark ? const Color(0xFF15171C) : Colors.white,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
             color: isDark ? Colors.white10 : Colors.black.withOpacity(0.05),
@@ -590,9 +589,7 @@ class InfoChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: isDark
-            ? const Color(0xFF15171C).withOpacity(0.92)
-            : Colors.white.withOpacity(0.92),
+        color: isDark ? const Color(0xFF15171C) : Colors.white,
         borderRadius: BorderRadius.circular(999),
         border: Border.all(
           color: isDark ? Colors.white12 : Colors.black.withOpacity(0.05),
