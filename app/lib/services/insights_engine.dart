@@ -30,7 +30,7 @@ class InsightsReport {
     required this.categoryCounts,
     required this.difficultyCounts,
     required this.weekdayHistogram,
-    required this.topTasks,
+    required this.topHabits,
   });
 
   final InsightsRange range;
@@ -62,7 +62,9 @@ class InsightsReport {
   /// Monday-first counts of tasks per weekday inside the window.
   final List<int> weekdayHistogram;
 
-  final List<({String title, int count})> topTasks;
+  /// Top tagged habits inside the window (`atomic_habit` on tracker
+  /// entries); entries without a habit tag are not counted.
+  final List<({String habit, int count})> topHabits;
 
   bool get isEmpty => totalTasks == 0;
 
@@ -100,11 +102,9 @@ InsightsReport computeInsights(
   final nowDate = now ?? DateTime.now();
   final todayNum = _dayNum(nowDate.year, nowDate.month, nowDate.day);
 
-  // Full history flattened to day-number -> count, plus rolling tallies.
+  // Full history flattened to day-number -> count. Streaks and totalTasks
+  // are global; per-activity tallies below are window-scoped.
   final perDay = <int, int>{};
-  final categories = <String, int>{};
-  final difficulties = <String, int>{};
-  final titles = <String, int>{};
 
   tracker.forEach((_, listData) {
     if (listData is! Map<String, dynamic>) return;
@@ -114,22 +114,6 @@ InsightsReport computeInsights(
       if (date == null) return;
       final num = _dayNum(date.year, date.month, date.day);
       perDay[num] = (perDay[num] ?? 0) + activities.length;
-
-      for (final activity in activities) {
-        if (activity is! Map<String, dynamic>) continue;
-        final category = activity['category']?.toString();
-        if (category != null && category.isNotEmpty) {
-          categories[category] = (categories[category] ?? 0) + 1;
-        }
-        final difficulty = activity['difficulty']?.toString().toUpperCase();
-        if (difficulty != null && difficulty.isNotEmpty) {
-          difficulties[difficulty] = (difficulties[difficulty] ?? 0) + 1;
-        }
-        final title = activity['title']?.toString();
-        if (title != null && title.isNotEmpty) {
-          titles[title] = (titles[title] ?? 0) + 1;
-        }
-      }
     });
   });
 
@@ -183,6 +167,40 @@ InsightsReport computeInsights(
     prevStartNum = startNum - days;
   }
 
+  // Per-activity tallies are scoped to the selected window so the category
+  // donut, effort split and habit ranking all respond to the range selector
+  // (previously these aggregated all history and never changed with range).
+  final categories = <String, int>{};
+  final difficulties = <String, int>{};
+  final habits = <String, int>{};
+
+  tracker.forEach((_, listData) {
+    if (listData is! Map<String, dynamic>) return;
+    listData.forEach((dateStr, activities) {
+      if (activities is! List || activities.isEmpty) return;
+      final date = parseDayOnly(dateStr);
+      if (date == null) return;
+      final num = _dayNum(date.year, date.month, date.day);
+      if (num < startNum || num > endNum) return;
+
+      for (final activity in activities) {
+        if (activity is! Map<String, dynamic>) continue;
+        final category = activity['category']?.toString();
+        if (category != null && category.isNotEmpty) {
+          categories[category] = (categories[category] ?? 0) + 1;
+        }
+        final difficulty = activity['difficulty']?.toString().toUpperCase();
+        if (difficulty != null && difficulty.isNotEmpty) {
+          difficulties[difficulty] = (difficulties[difficulty] ?? 0) + 1;
+        }
+        final habit = activity['atomic_habit']?.toString().trim();
+        if (habit != null && habit.isNotEmpty) {
+          habits[habit] = (habits[habit] ?? 0) + 1;
+        }
+      }
+    });
+  });
+
   int thisPeriod = 0;
   int previousPeriod = 0;
   int activeDays = 0;
@@ -231,14 +249,14 @@ InsightsReport computeInsights(
     }
   }
 
-  final topTasks = (titles.entries.toList()
+  final topHabits = (habits.entries.toList()
         ..sort((a, b) {
           final byCount = b.value.compareTo(a.value);
           if (byCount != 0) return byCount;
           return a.key.toLowerCase().compareTo(b.key.toLowerCase());
         }))
       .take(5)
-      .map((e) => (title: e.key, count: e.value))
+      .map((e) => (habit: e.key, count: e.value))
       .toList();
 
   return InsightsReport(
@@ -258,7 +276,7 @@ InsightsReport computeInsights(
     categoryCounts: categories,
     difficultyCounts: difficulties,
     weekdayHistogram: weekdayHistogram,
-    topTasks: topTasks,
+    topHabits: topHabits,
   );
 }
 

@@ -334,7 +334,12 @@ void main() {
       final liveTracker = <String, dynamic>{
         'Work': <String, dynamic>{
           dateStr: [
-            {'title': 'Read', 'category': 'Work', 'difficulty': 'EASY'},
+            {
+              'title': 'Read',
+              'category': 'Work',
+              'difficulty': 'EASY',
+              'atomic_habit': 'Reading',
+            },
           ],
         },
       };
@@ -361,8 +366,8 @@ void main() {
       expect(find.text('All'), findsOneWidget);
       expect(find.text('CATEGORY MIX'), findsOneWidget);
       expect(find.text('ACTIVITY'), findsOneWidget);
-      expect(find.text('TOP TASKS'), findsOneWidget);
-      expect(find.text('Read'), findsOneWidget);
+      expect(find.text('TOP HABITS'), findsOneWidget);
+      expect(find.text('Reading'), findsOneWidget);
     });
 
     testWidgets('shows the empty state for a fresh tracker', (

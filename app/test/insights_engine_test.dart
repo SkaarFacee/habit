@@ -8,10 +8,12 @@ Map<String, dynamic> _entry({
   String category = 'Work',
   String difficulty = 'EASY',
   String title = 'Task',
+  String? habit,
 }) => <String, dynamic>{
   'category': category,
   'difficulty': difficulty,
   'title': title,
+  if (habit != null) 'atomic_habit': habit,
 };
 
 void main() {
@@ -226,16 +228,16 @@ void main() {
       expect(peakWeekday(report.weekdayHistogram), 0);
     });
 
-    test('top tasks ranked by count with alphabetical tie-break', () {
+    test('top habits ranked by count with alphabetical tie-break', () {
       final tracker = <String, dynamic>{
         'Work': <String, dynamic>{
           '10-08-2026': [
-            _entry(title: 'b-task'),
-            _entry(title: 'a-task'),
-            _entry(title: 'b-task'),
-            _entry(title: 'c-task'),
-            _entry(title: 'c-task'),
-            _entry(title: 'c-task'),
+            _entry(habit: 'b-habit'),
+            _entry(habit: 'a-habit'),
+            _entry(habit: 'b-habit'),
+            _entry(habit: 'c-habit'),
+            _entry(habit: 'c-habit'),
+            _entry(habit: 'c-habit'),
           ],
         },
       };
@@ -246,18 +248,20 @@ void main() {
         now: now,
       );
 
-      expect(report.topTasks.map((t) => t.title).toList(), [
-        'c-task',
-        'b-task',
-        'a-task',
+      expect(report.topHabits.map((t) => t.habit).toList(), [
+        'c-habit',
+        'b-habit',
+        'a-habit',
       ]);
-      expect(report.topTasks.first.count, 3);
+      expect(report.topHabits.first.count, 3);
     });
 
-    test('top tasks capped at five', () {
+    test('top habits capped at five', () {
       final tracker = <String, dynamic>{
         'Work': <String, dynamic>{
-          '10-08-2026': [for (int i = 1; i <= 8; i++) _entry(title: 'task-$i')],
+          '10-08-2026': [
+            for (int i = 1; i <= 8; i++) _entry(habit: 'habit-$i'),
+          ],
         },
       };
 
@@ -267,7 +271,54 @@ void main() {
         now: now,
       );
 
-      expect(report.topTasks, hasLength(5));
+      expect(report.topHabits, hasLength(5));
+    });
+
+    test('entries without an atomic_habit tag are not counted', () {
+      final tracker = <String, dynamic>{
+        'Work': <String, dynamic>{
+          '10-08-2026': [_entry(), _entry(habit: 'Meditation')],
+        },
+      };
+
+      final report = computeInsights(
+        tracker,
+        range: InsightsRange.week,
+        now: now,
+      );
+
+      expect(report.topHabits.map((t) => t.habit).toList(), ['Meditation']);
+      expect(report.topHabits.single.count, 1);
+    });
+
+    test('window-scoped tallies exclude out-of-window entries', () {
+      final tracker = <String, dynamic>{
+        'Work': <String, dynamic>{
+          // Monday 2026-08-10 — inside the current week window.
+          '10-08-2026': [_entry(category: 'Work', habit: 'Meditation')],
+          // Monday 2026-07-27 — two weeks back, outside both windows.
+          '27-07-2026': [
+            _entry(category: 'Play', difficulty: 'HARD', habit: 'Running'),
+          ],
+          // Sunday 2026-08-09 — previous window only.
+          '09-08-2026': [_entry(category: 'Health', habit: 'Reading')],
+        },
+      };
+
+      final report = computeInsights(
+        tracker,
+        range: InsightsRange.week,
+        now: now,
+      );
+
+      // Only today's entry is in the Mon–Sun window.
+      expect(report.categoryCounts, {'Work': 1});
+      expect(report.difficultyCounts, {'EASY': 1});
+      expect(report.topHabits.map((t) => t.habit).toList(), ['Meditation']);
+
+      // Global aggregates still see everything.
+      expect(report.totalTasks, 3);
+      expect(report.previousPeriod, 1);
     });
 
     test('flat histogram has no peak weekday', () {
